@@ -1,0 +1,25 @@
+# Datos descargados (videos y transcripciones)
+downloads/
+*.mp4
+*.vtt
+
+# Datos de sesión
+.browser-data/
+.cookies.json
+recordings.json
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-udea"
+version = "1.0.0"
+description = "Descarga transcripciones de Zoom desde Moodle UdeA y abre Claude Code"
+requires-python = ">=3.10"
+dependencies = [
+    "yt-dlp>=2024.1.0",
+    "playwright>=1.40.0",
+    "playwright-stealth>=1.0.0",
+    "questionary>=2.0.0",
+    "tqdm>=4.60.0",
+]
+
+[project.scripts]
+claude_udea = "claude_udea.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["claude_udea*"]

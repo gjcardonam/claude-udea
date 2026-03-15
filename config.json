@@ -1,0 +1,23 @@
+{
+  "download_dir": "./downloads",
+  "manifest_file": "./manifest.json",
+  "recordings_file": "./recordings.json",
+  "courses": {
+    "calidad-de-software": {
+      "name": "Calidad de Software",
+      "moodle_url": "https://udearroba.udea.edu.co/internos/mod/recordingszoom/recordinglist.php?id=2484240"
+    },
+    "ingenieria-web": {
+      "name": "Ingeniería Web",
+      "moodle_url": "https://udearroba.udea.edu.co/internos/mod/recordingszoom/recordinglist.php?id=2486575"
+    },
+    "optimizacion": {
+      "name": "Optimización",
+      "moodle_url": "https://udearroba.udea.edu.co/internos/mod/recordingszoom/recordinglist.php?id=2493972"
+    },
+    "seguridad-de-la-informacion": {
+      "name": "Seguridad de la Información",
+      "moodle_url": "https://udearroba.udea.edu.co/internos/mod/recordingszoom/recordinglist.php?id=2494104"
+    }
+  }
+}
