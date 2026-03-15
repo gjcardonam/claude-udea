@@ -20,3 +20,6 @@ claude_udea = "claude_udea.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["claude_udea*"]
+
+[tool.setuptools.package-data]
+claude_udea = ["templates/**/*.md", "templates/.claude/**/*.md"]

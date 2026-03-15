@@ -31,7 +31,43 @@ def _get_work_dir() -> Path:
     WORK_DIR.mkdir(exist_ok=True)
     if not (WORK_DIR / "config.json").exists():
         _create_default_config(WORK_DIR)
+    _ensure_templates(WORK_DIR)
     return WORK_DIR
+
+
+def _ensure_templates(work_dir: Path):
+    """Copia CLAUDE.md, rules y skills si no existen."""
+    import shutil
+    templates_dir = Path(__file__).parent / "templates"
+    if not templates_dir.exists():
+        return
+
+    # CLAUDE.md
+    dest_claude = work_dir / "CLAUDE.md"
+    if not dest_claude.exists():
+        src = templates_dir / "CLAUDE.md"
+        if src.exists():
+            shutil.copy2(src, dest_claude)
+
+    # .claude/rules.md y skills/
+    src_claude_dir = templates_dir / ".claude"
+    dest_claude_dir = work_dir / ".claude"
+    if src_claude_dir.exists():
+        dest_claude_dir.mkdir(exist_ok=True)
+        # rules.md
+        src_rules = src_claude_dir / "rules.md"
+        dest_rules = dest_claude_dir / "rules.md"
+        if src_rules.exists() and not dest_rules.exists():
+            shutil.copy2(src_rules, dest_rules)
+        # skills/
+        src_skills = src_claude_dir / "skills"
+        dest_skills = dest_claude_dir / "skills"
+        if src_skills.exists():
+            dest_skills.mkdir(exist_ok=True)
+            for skill_file in src_skills.glob("*.md"):
+                dest_skill = dest_skills / skill_file.name
+                if not dest_skill.exists():
+                    shutil.copy2(skill_file, dest_skill)
 
 
 def _create_default_config(work_dir: Path):
