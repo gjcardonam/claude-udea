@@ -9,9 +9,11 @@ import shutil
 import time
 from pathlib import Path
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth_async
+from playwright_stealth import Stealth
 
 LOGIN_URL = "https://udearroba.udea.edu.co/internos/my/"
+
+stealth = Stealth()
 
 # Args para que Chromium parezca un browser normal
 STEALTH_ARGS = [
@@ -131,7 +133,7 @@ async def do_login(work_dir: Path):
             ignore_default_args=["--enable-automation"],
         )
         page = context.pages[0] if context.pages else await context.new_page()
-        await stealth_async(page)
+        await stealth.apply_stealth_async(page)
 
         await _safe_goto(page, LOGIN_URL)
         needs_login = "login" in page.url.lower() or "sso" in page.url.lower()
@@ -165,7 +167,7 @@ async def scrape_all(work_dir: Path, courses: dict) -> dict:
             ignore_default_args=["--enable-automation"],
         )
         page = context.pages[0] if context.pages else await context.new_page()
-        await stealth_async(page)
+        await stealth.apply_stealth_async(page)
 
         for slug, course_info in courses.items():
             links = await _scrape_course(page, course_info)

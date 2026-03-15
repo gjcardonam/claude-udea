@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(cd:*)",
+      "Bash(taskkill:*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(powershell -Command \"[Environment]::GetEnvironmentVariable\\('PATH', 'User'\\)\" | tr ';' '\\\\n' | grep -i \"Python314\" || echo \"not in PATH\")",
+      "Bash(powershell -Command '$current = [Environment]::GetEnvironmentVariable\\(\"PATH\", \"User\"\\); $new = \"C:\\\\Users\\\\gjcar\\\\AppData\\\\Roaming\\\\Python\\\\Python314\\\\Scripts\"; if \\($current -notlike \"*$new*\"\\) { [Environment]::SetEnvironmentVariable\\(\"PATH\", \"$current;$new\", \"User\"\\); Write-Host \"Added to PATH\" } else { Write-Host \"Already in PATH\" }')",
+      "Bash(export:*)",
+      "Bash(\"C:/Users/gjcar/AppData/Roaming/Python/Python314/Scripts/claude_udea.exe\" --status)",
+      "Bash(gh auth:*)",
+      "Bash(mkdir:*)"
+    ]
+  }
+}

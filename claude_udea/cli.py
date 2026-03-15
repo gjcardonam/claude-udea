@@ -23,24 +23,15 @@ except Exception:
     pass
 
 
+WORK_DIR = Path("C:/claude-udea")
+
+
 def _get_work_dir() -> Path:
-    """Directorio de trabajo: donde está config.json."""
-    # Buscar config.json en cwd, luego en el directorio del paquete
-    cwd = Path.cwd()
-    if (cwd / "config.json").exists():
-        return cwd
-
-    # Buscar junto al script original (para desarrollo)
-    pkg_dir = Path(__file__).parent.parent
-    if (pkg_dir / "config.json").exists():
-        return pkg_dir
-
-    # Crear en home del usuario
-    default = Path.home() / "claude-udea"
-    default.mkdir(exist_ok=True)
-    if not (default / "config.json").exists():
-        _create_default_config(default)
-    return default
+    """Directorio de trabajo fijo en C:/claude-udea."""
+    WORK_DIR.mkdir(exist_ok=True)
+    if not (WORK_DIR / "config.json").exists():
+        _create_default_config(WORK_DIR)
+    return WORK_DIR
 
 
 def _create_default_config(work_dir: Path):
@@ -284,20 +275,19 @@ def fase_final(config, recordings, target_courses):
         summary_lines.append(f"- {course['name']} ({len(vtts)} transcripciones): {course_dir}")
 
     prompt = (
-        "Tengo transcripciones de clases universitarias (UdeA, semestre 2026-1) "
-        "en formato WebVTT con timestamps. Están organizadas así:\n\n"
+        "Hola. Acabo de descargar las transcripciones de mis clases. "
+        "Tengo esto disponible:\n\n"
         + "\n".join(summary_lines) + "\n\n"
-        f"Directorio base: {transcripts_dir.resolve()}\n\n"
-        "Puedes leer cualquier archivo .vtt para responder preguntas sobre el contenido "
-        "de las clases. Las transcripciones son automáticas de Zoom, así que pueden "
-        "tener errores de transcripción. ¿En qué te puedo ayudar?"
+        "Presentate brevemente y mostrame qué comandos tengo disponibles."
     )
 
+    # Abrir Claude Code desde C:\claude-udea donde está CLAUDE.md y las skills
+    work_dir = download_dir.parent
     try:
-        subprocess.run(["claude", prompt], cwd=str(transcripts_dir.resolve()))
+        subprocess.run(["claude", prompt], cwd=str(work_dir.resolve()))
     except FileNotFoundError:
         print("  'claude' no está en el PATH.")
-        print(f"  Abrilo manualmente en: {transcripts_dir.resolve()}")
+        print(f"  Abrilo manualmente en: {work_dir.resolve()}")
 
 
 # ─── Main ────────────────────────────────────────────────────
