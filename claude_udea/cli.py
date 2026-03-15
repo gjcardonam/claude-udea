@@ -29,8 +29,13 @@ WORK_DIR = Path("C:/claude-udea")
 def _get_work_dir() -> Path:
     """Directorio de trabajo fijo en C:/claude-udea."""
     WORK_DIR.mkdir(exist_ok=True)
+
+    # Si no existe config.json, correr setup interactivo
     if not (WORK_DIR / "config.json").exists():
-        _create_default_config(WORK_DIR)
+        from claude_udea.setup import run_setup
+        if not run_setup(WORK_DIR):
+            sys.exit(0)
+
     _ensure_templates(WORK_DIR)
     return WORK_DIR
 
@@ -42,24 +47,18 @@ def _ensure_templates(work_dir: Path):
     if not templates_dir.exists():
         return
 
-    # CLAUDE.md
-    dest_claude = work_dir / "CLAUDE.md"
-    if not dest_claude.exists():
-        src = templates_dir / "CLAUDE.md"
-        if src.exists():
-            shutil.copy2(src, dest_claude)
+    # CLAUDE.md — regenerar siempre con las asignaturas actuales
+    _generate_claude_md(work_dir)
 
     # .claude/rules.md y skills/
     src_claude_dir = templates_dir / ".claude"
     dest_claude_dir = work_dir / ".claude"
     if src_claude_dir.exists():
         dest_claude_dir.mkdir(exist_ok=True)
-        # rules.md
         src_rules = src_claude_dir / "rules.md"
         dest_rules = dest_claude_dir / "rules.md"
         if src_rules.exists() and not dest_rules.exists():
             shutil.copy2(src_rules, dest_rules)
-        # skills/
         src_skills = src_claude_dir / "skills"
         dest_skills = dest_claude_dir / "skills"
         if src_skills.exists():
@@ -70,32 +69,72 @@ def _ensure_templates(work_dir: Path):
                     shutil.copy2(skill_file, dest_skill)
 
 
-def _create_default_config(work_dir: Path):
-    config = {
-        "download_dir": str(work_dir / "downloads"),
-        "manifest_file": str(work_dir / "manifest.json"),
-        "recordings_file": str(work_dir / "recordings.json"),
-        "courses": {
-            "calidad-de-software": {
-                "name": "Calidad de Software",
-                "moodle_url": "https://udearroba.udea.edu.co/internos/mod/recordingszoom/recordinglist.php?id=2484240"
-            },
-            "ingenieria-web": {
-                "name": "Ingeniería Web",
-                "moodle_url": "https://udearroba.udea.edu.co/internos/mod/recordingszoom/recordinglist.php?id=2486575"
-            },
-            "optimizacion": {
-                "name": "Optimización",
-                "moodle_url": "https://udearroba.udea.edu.co/internos/mod/recordingszoom/recordinglist.php?id=2493972"
-            },
-            "seguridad-de-la-informacion": {
-                "name": "Seguridad de la Información",
-                "moodle_url": "https://udearroba.udea.edu.co/internos/mod/recordingszoom/recordinglist.php?id=2494104"
-            }
-        }
-    }
-    with open(work_dir / "config.json", "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
+def _generate_claude_md(work_dir: Path):
+    """Genera CLAUDE.md dinámicamente según las asignaturas configuradas."""
+    config_path = work_dir / "config.json"
+    if not config_path.exists():
+        return
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    courses = config.get("courses", {})
+    course_lines = "\n".join(
+        f"- **{info['name']}** → `downloads/transcripts/{slug}/`"
+        for slug, info in courses.items()
+    )
+
+    content = f"""# Asistente Académico UdeA
+
+Eres un asistente académico especializado para un estudiante de la Universidad de Antioquia. Tu única fuente de verdad son las transcripciones de clase en formato WebVTT ubicadas en `downloads/transcripts/`.
+
+## Asignaturas
+
+{course_lines}
+
+## Funciones principales
+
+### 1. Enseñar
+Enseñar TODO lo visto en clase de forma organizada, profesional, al grano. No omitir ningún tema. No inventar contenido que no esté en las transcripciones. Cada tema debe tener referencia a la grabación y minuto donde se trató.
+
+### 2. Informar compromisos
+Encontrar TODOS los pendientes: parciales, quices, tareas, talleres, trabajos, entregas, exposiciones, o cualquier actividad mencionada en clase. Presentarlos visualmente de forma clara con fechas y estado.
+
+### 3. Planear y organizar
+Ayudar al estudiante a planificar su tiempo: crear horarios de estudio, priorizar tareas, distribuir carga académica, y asegurar que cumpla con todo.
+
+## Reglas de referencia
+
+Siempre que menciones un tema o un pendiente, incluye:
+- Nombre del archivo VTT (grabación)
+- Timestamp (minuto aproximado)
+- Asignatura
+
+Formato: `[Asignatura | archivo.vtt | ~min 23]`
+
+## Cómo leer las transcripciones
+
+Los archivos `.vtt` tienen este formato:
+```
+00:12:34.000 --> 00:12:38.000
+texto que dijo el profesor
+```
+
+El timestamp `00:12:34` = minuto 12. Usa eso para dar referencias.
+
+## Comportamiento
+
+- Responde en español
+- Sé directo y conciso a menos que te pidan profundizar
+- No des ejemplos a menos que te los pidan (usa /ejemplos)
+- Si el estudiante se desvía del tema académico, redirige amablemente
+- Nunca inventes información que no esté en las transcripciones
+- Si no encuentras algo en las transcripciones, dilo honestamente
+"""
+
+    with open(work_dir / "CLAUDE.md", "w", encoding="utf-8") as f:
+        f.write(content)
+
 
 
 # ─── Helpers ─────────────────────────────────────────────────
@@ -355,6 +394,14 @@ def main():
     skip_scrape = "--skip-scrape" in args
     skip_video_flag = "--skip-video" in args
     download_all_flag = "--all" in args
+    add_course_flag = "--add-course" in args
+
+    if add_course_flag:
+        from claude_udea.setup import add_course
+        add_course(work_dir)
+        # Regenerar CLAUDE.md con la nueva asignatura
+        _generate_claude_md(work_dir)
+        return
 
     course_args = [a for a in args if not a.startswith("--")]
     all_courses = list(config["courses"].keys())
