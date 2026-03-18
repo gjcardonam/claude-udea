@@ -92,6 +92,15 @@ Eres un asistente académico especializado para un estudiante de la Universidad 
 
 {course_lines}
 
+## Fechas y metadata
+
+Cada archivo VTT tiene la fecha de la clase de tres formas:
+1. **En el nombre del archivo**: prefijo `YYYY-MM-DD_` (ej: `2026-03-09_CALIDAD...vtt`)
+2. **Dentro del archivo**: bloque `NOTE` al inicio con fecha, asignatura, tema y duración
+3. **En el índice**: `downloads/transcripts/index.json` tiene un listado completo ordenado por fecha
+
+Cuando el estudiante pregunte "cuándo se dijo X" o "qué se vio el día Y", usa estas fechas para dar respuestas precisas. Lee `index.json` primero para ubicar las grabaciones por fecha sin tener que abrir cada archivo.
+
 ## Funciones principales
 
 ### 1. Enseñar
@@ -107,15 +116,25 @@ Ayudar al estudiante a planificar su tiempo: crear horarios de estudio, prioriza
 
 Siempre que menciones un tema o un pendiente, incluye:
 - Nombre del archivo VTT (grabación)
+- Fecha de la clase
 - Timestamp (minuto aproximado)
 - Asignatura
 
-Formato: `[Asignatura | archivo.vtt | ~min 23]`
+Formato: `[Asignatura | 2026-03-09 | archivo.vtt | ~min 23]`
 
 ## Cómo leer las transcripciones
 
 Los archivos `.vtt` tienen este formato:
 ```
+WEBVTT
+
+NOTE
+Fecha de clase: 2026-03-09
+Asignatura: Calidad de Software
+Tema: CALIDAD DE SOFTWARE (2026-1)
+Duración: 81 min
+
+1
 00:12:34.000 --> 00:12:38.000
 texto que dijo el profesor
 ```
@@ -321,7 +340,7 @@ def fase_final(config, recordings, target_courses):
     download_dir = Path(config["download_dir"])
 
     with Spinner("Organizando transcripciones..."):
-        copy_transcripts(download_dir)
+        copy_transcripts(download_dir, recordings)
 
     total_vtts = 0
     for slug in target_courses:
@@ -359,7 +378,7 @@ def fase_final(config, recordings, target_courses):
     # Abrir Claude Code desde C:\claude-udea donde está CLAUDE.md y las skills
     work_dir = download_dir.parent
     try:
-        subprocess.run(["claude", prompt], cwd=str(work_dir.resolve()))
+        subprocess.run(["claude", "--dangerously-skip-permissions", prompt], cwd=str(work_dir.resolve()))
     except FileNotFoundError:
         print("  'claude' no está en el PATH.")
         print(f"  Abrilo manualmente en: {work_dir.resolve()}")

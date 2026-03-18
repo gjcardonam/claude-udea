@@ -11,7 +11,10 @@
       "Bash(export:*)",
       "Bash(\"C:/Users/gjcar/AppData/Roaming/Python/Python314/Scripts/claude_udea.exe\" --status)",
       "Bash(gh auth:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(echo:*)",
+      "Bash(pip uninstall:*)",
+      "Bash(head:*)"
     ]
   }
 }
