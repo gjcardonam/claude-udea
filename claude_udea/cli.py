@@ -23,11 +23,19 @@ except Exception:
     pass
 
 
-WORK_DIR = Path("C:/claude-udea")
+import platform
+
+def _default_work_dir() -> Path:
+    """Retorna el directorio de trabajo según el OS."""
+    if platform.system() == "Windows":
+        return Path("C:/claude-udea")
+    return Path.home() / "claude-udea"
+
+WORK_DIR = _default_work_dir()
 
 
 def _get_work_dir() -> Path:
-    """Directorio de trabajo fijo en C:/claude-udea."""
+    """Directorio de trabajo fijo."""
     WORK_DIR.mkdir(exist_ok=True)
 
     # Si no existe config.json, correr setup interactivo
@@ -223,16 +231,13 @@ class Spinner:
 # ─── Fase 1: Scraping ───────────────────────────────────────
 
 def fase_scraping(work_dir, config, recordings_path, target_courses):
-    from claude_udea.browser import do_login, scrape_all
+    from claude_udea.browser import login_and_scrape
 
     existing = load_recordings(recordings_path)
 
-    asyncio.run(do_login(work_dir))
-
     courses_to_scrape = {slug: config["courses"][slug] for slug in target_courses}
 
-    with Spinner("Buscando grabaciones en Moodle..."):
-        scraped = asyncio.run(scrape_all(work_dir, courses_to_scrape))
+    scraped = asyncio.run(login_and_scrape(work_dir, courses_to_scrape))
 
     total_new = 0
     for slug, links in scraped.items():
@@ -288,7 +293,7 @@ def fase_descarga(config, recordings, target_courses, skip_video, dry_run):
             continue
         course = recordings[slug]
         for rec_id, rec_info in course.get("recordings", {}).items():
-            if is_downloaded(archive_path, rec_id):
+            if rec_info.get("downloaded") or is_downloaded(archive_path, rec_id):
                 already += 1
             else:
                 url = rec_info.get("url") or rec_info.get("share_url", "")
@@ -394,10 +399,8 @@ def main():
 
     import questionary
     from questionary import Style
-    from claude_udea.browser import force_clean
 
     work_dir = _get_work_dir()
-    force_clean(work_dir)
 
     config = load_config(work_dir)
     recordings_path = Path(config["recordings_file"])

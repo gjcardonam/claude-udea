@@ -4,8 +4,10 @@ Aislado para que cambios en otras partes no lo afecten.
 """
 
 import asyncio
+import platform
 import subprocess
 import shutil
+import signal
 import time
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -27,15 +29,30 @@ def _browser_data_dir(work_dir: Path) -> Path:
     return work_dir / ".browser-data"
 
 
+def _kill_chromium():
+    """Mata procesos de Chromium de forma cross-platform."""
+    if platform.system() == "Windows":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "chromium.exe"],
+                capture_output=True, timeout=5,
+            )
+        except Exception:
+            pass
+    else:
+        # macOS / Linux: pkill chromium
+        try:
+            subprocess.run(
+                ["pkill", "-f", "chromium"],
+                capture_output=True, timeout=5,
+            )
+        except Exception:
+            pass
+
+
 def force_clean(work_dir: Path):
     """Mata procesos de Chromium y borra .browser-data de forma robusta."""
-    try:
-        subprocess.run(
-            ["taskkill", "/F", "/IM", "chromium.exe"],
-            capture_output=True, timeout=5,
-        )
-    except Exception:
-        pass
+    _kill_chromium()
 
     bdir = _browser_data_dir(work_dir)
     for _ in range(3):
@@ -47,13 +64,15 @@ def force_clean(work_dir: Path):
         except Exception:
             time.sleep(1)
 
-    try:
-        subprocess.run(
-            ["cmd", "/c", "rmdir", "/s", "/q", str(bdir)],
-            capture_output=True, timeout=10,
-        )
-    except Exception:
-        pass
+    # Fallback para Windows
+    if platform.system() == "Windows":
+        try:
+            subprocess.run(
+                ["cmd", "/c", "rmdir", "/s", "/q", str(bdir)],
+                capture_output=True, timeout=10,
+            )
+        except Exception:
+            pass
 
 
 async def _safe_goto(page, url):
@@ -119,9 +138,20 @@ async def _scrape_course(page, course_info: dict) -> list[dict]:
 
 
 async def do_login(work_dir: Path):
-    """Abre browser visible para login. Cierra al detectar sesión."""
+    """No-op: login ahora se hace dentro de login_and_scrape."""
+    pass
+
+
+async def scrape_all(work_dir: Path, courses: dict) -> dict:
+    """No-op: scraping ahora se hace dentro de login_and_scrape."""
+    return {}
+
+
+async def login_and_scrape(work_dir: Path, courses: dict) -> dict:
+    """Login + scraping en una sola sesión de browser. Retorna {slug: [links]}."""
     force_clean(work_dir)
     bdir = _browser_data_dir(work_dir)
+    results = {}
 
     async with async_playwright() as p:
         context = await p.chromium.launch_persistent_context(
@@ -135,6 +165,7 @@ async def do_login(work_dir: Path):
         page = context.pages[0] if context.pages else await context.new_page()
         await stealth.apply_stealth_async(page)
 
+        # Login
         await _safe_goto(page, LOGIN_URL)
         needs_login = "login" in page.url.lower() or "sso" in page.url.lower()
 
@@ -149,26 +180,7 @@ async def do_login(work_dir: Path):
             except Exception:
                 await _wait_for_login(page)
 
-        await context.close()
-
-
-async def scrape_all(work_dir: Path, courses: dict) -> dict:
-    """Scraping headless. Retorna {slug: [links]}."""
-    bdir = _browser_data_dir(work_dir)
-    results = {}
-
-    async with async_playwright() as p:
-        context = await p.chromium.launch_persistent_context(
-            str(bdir),
-            headless=True,
-            viewport={"width": 1280, "height": 800},
-            locale="es-CO",
-            args=STEALTH_ARGS,
-            ignore_default_args=["--enable-automation"],
-        )
-        page = context.pages[0] if context.pages else await context.new_page()
-        await stealth.apply_stealth_async(page)
-
+        # Scraping en la misma sesión
         for slug, course_info in courses.items():
             links = await _scrape_course(page, course_info)
             results[slug] = links

@@ -55,9 +55,22 @@ def download_one(url, output_dir, archive_path, skip_video=False, dry_run=False)
             cmd, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=600,
         )
-        return result.returncode == 0
+        ok = result.returncode == 0
+        # yt-dlp con --skip-download no escribe al archive, hacerlo manualmente
+        if ok and skip_video and not dry_run:
+            rec_id = _extract_rec_id_from_url(url)
+            if rec_id and not is_downloaded(archive_path, rec_id):
+                with open(archive_path, "a", encoding="utf-8") as f:
+                    f.write(f"zoomus {rec_id}\n")
+        return ok
     except Exception:
         return False
+
+
+def _extract_rec_id_from_url(url: str) -> str:
+    """Extrae el recording ID de una URL de Zoom: /rec/share/REC_ID o /rec/play/REC_ID."""
+    match = re.search(r"/rec/(?:share|play)/([^?\s]+)", url)
+    return match.group(1) if match else ""
 
 
 def _extract_rec_id_from_filename(filename: str) -> str:
