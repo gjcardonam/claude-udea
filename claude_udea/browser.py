@@ -206,89 +206,116 @@ async def scrape_all(work_dir: Path, courses: dict) -> dict:
     return {}
 
 
-async def login_and_scrape(work_dir: Path, courses: dict) -> dict:
-    """Login + scraping en una sola sesión de browser. Retorna {slug: [links]}."""
-    force_clean(work_dir)
+def _launch_args(headless: bool) -> dict:
+    """Parámetros comunes para launch_persistent_context."""
+    return dict(
+        headless=headless,
+        viewport={"width": 1366, "height": 768},
+        screen={"width": 1920, "height": 1080},
+        locale="es-CO",
+        timezone_id="America/Bogota",
+        user_agent=CHROME_UA,
+        color_scheme="light",
+        args=STEALTH_ARGS,
+        ignore_default_args=["--enable-automation"],
+    )
+
+
+_INIT_SCRIPT = """
+    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+    if (!window.chrome) {
+        window.chrome = {runtime: {}, loadTimes: function(){}, csi: function(){}};
+    }
+    Object.defineProperty(navigator, 'plugins', {
+        get: () => {
+            const plugins = [
+                {name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer'},
+                {name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
+                {name: 'Native Client', filename: 'internal-nacl-plugin'},
+            ];
+            plugins.length = 3;
+            return plugins;
+        }
+    });
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (params) =>
+        params.name === 'notifications'
+            ? Promise.resolve({state: Notification.permission})
+            : originalQuery(params);
+"""
+
+
+async def _setup_page(context):
+    """Prepara una página con stealth y parches anti-detección."""
+    page = context.pages[0] if context.pages else await context.new_page()
+    await stealth.apply_stealth_async(page)
+    await page.add_init_script(_INIT_SCRIPT)
+    return page
+
+
+async def _ensure_login(work_dir: Path, playwright_instance):
+    """Abre browser visible solo si es necesario hacer login. Cierra al terminar."""
     bdir = _browser_data_dir(work_dir)
-    results = {}
 
-    async with async_playwright() as p:
-        context = await p.chromium.launch_persistent_context(
-            str(bdir),
-            headless=False,
-            viewport={"width": 1366, "height": 768},
-            screen={"width": 1920, "height": 1080},
-            locale="es-CO",
-            timezone_id="America/Bogota",
-            user_agent=CHROME_UA,
-            color_scheme="light",
-            args=STEALTH_ARGS,
-            ignore_default_args=["--enable-automation"],
+    # Primero intentar headless para ver si la sesión persiste
+    try:
+        context = await playwright_instance.chromium.launch_persistent_context(
+            str(bdir), **_launch_args(headless=True),
         )
-        page = context.pages[0] if context.pages else await context.new_page()
-        await stealth.apply_stealth_async(page)
+        page = await _setup_page(context)
+        await page.goto(LOGIN_URL, wait_until="commit", timeout=30000)
+        await asyncio.sleep(2)
 
-        # Parches extra anti-detección
-        await page.add_init_script("""
-            // Ocultar que es Playwright/automation
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-
-            // Chrome real tiene window.chrome
-            if (!window.chrome) {
-                window.chrome = {runtime: {}, loadTimes: function(){}, csi: function(){}};
-            }
-
-            // Plugins reales (Chrome siempre tiene al menos estos)
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => {
-                    const plugins = [
-                        {name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer'},
-                        {name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
-                        {name: 'Native Client', filename: 'internal-nacl-plugin'},
-                    ];
-                    plugins.length = 3;
-                    return plugins;
-                }
-            });
-
-            // Permissions API consistente
-            const originalQuery = window.navigator.permissions.query;
-            window.navigator.permissions.query = (params) =>
-                params.name === 'notifications'
-                    ? Promise.resolve({state: Notification.permission})
-                    : originalQuery(params);
-        """)
-
-        # Login
-        await _safe_goto(page, LOGIN_URL)
-        needs_login = "login" in page.url.lower() or "sso" in page.url.lower()
-
-        if needs_login:
-            await _wait_for_login(page)
-        else:
+        is_logged_in = "/my/" in page.url
+        if is_logged_in:
             try:
                 await page.wait_for_selector(
                     ".course-listitem, .coursebox, .card-deck, [data-region='course-content']",
                     timeout=5000,
                 )
             except Exception:
-                await _wait_for_login(page)
+                is_logged_in = False
 
-        # Login listo — ocultar ventana moviendo fuera de pantalla
-        print("  ✔ Sesión detectada, scrapeando en segundo plano...\n")
+        await context.close()
+
+        if is_logged_in:
+            print("  ✔ Sesión activa (login no necesario)\n")
+            return
+    except Exception:
+        # Si falla headless, seguir con visible
         try:
-            cdp_session = await context.new_cdp_session(page)
-            resp = await cdp_session.send("Browser.getWindowForTarget")
-            window_id = resp["windowId"]
-            await cdp_session.send("Browser.setWindowBounds", {
-                "windowId": window_id,
-                "bounds": {"left": -9999, "top": -9999, "windowState": "normal"},
-            })
-            await cdp_session.detach()
+            await context.close()
         except Exception:
             pass
 
-        # Scraping en la misma sesión
+    # Sesión expirada — abrir visible para login manual
+    context = await playwright_instance.chromium.launch_persistent_context(
+        str(bdir), **_launch_args(headless=False),
+    )
+    page = await _setup_page(context)
+    await _safe_goto(page, LOGIN_URL)
+    await _wait_for_login(page)
+    print("  ✔ Sesión guardada\n")
+    await context.close()
+
+
+async def login_and_scrape(work_dir: Path, courses: dict) -> dict:
+    """Login (visible si es necesario) + scraping headless. Retorna {slug: [links]}."""
+    force_clean(work_dir)
+    bdir = _browser_data_dir(work_dir)
+    results = {}
+
+    async with async_playwright() as p:
+        # Paso 1: asegurar login (abre ventana solo si la sesión expiró)
+        await _ensure_login(work_dir, p)
+
+        # Paso 2: scrapear en headless — invisible
+        print("  Scrapeando en segundo plano...\n")
+        context = await p.chromium.launch_persistent_context(
+            str(bdir), **_launch_args(headless=True),
+        )
+        page = await _setup_page(context)
+
         for slug, course_info in courses.items():
             links = await _scrape_course(page, course_info)
             results[slug] = links
