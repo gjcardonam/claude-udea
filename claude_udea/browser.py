@@ -82,12 +82,18 @@ async def _save_session(context, work_dir: Path):
         pass
 
 
-def _load_session_path(work_dir: Path):
-    """Retorna path al archivo de sesión si existe, None si no."""
+async def _restore_session(context, work_dir: Path):
+    """Restaura cookies guardadas en el contexto del browser."""
     path = _session_file(work_dir)
-    if path.exists():
-        return str(path)
-    return None
+    if not path.exists():
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            state = json.load(f)
+        for cookie in state.get("cookies", []):
+            await context.add_cookies([cookie])
+    except Exception:
+        pass
 
 
 def _kill_chromium():
@@ -230,9 +236,9 @@ async def scrape_all(work_dir: Path, courses: dict) -> dict:
     return {}
 
 
-def _launch_args(headless: bool, storage_state=None) -> dict:
+def _launch_args(headless: bool) -> dict:
     """Parámetros comunes para launch_persistent_context."""
-    opts = dict(
+    return dict(
         headless=headless,
         viewport={"width": 1366, "height": 768},
         screen={"width": 1920, "height": 1080},
@@ -243,9 +249,6 @@ def _launch_args(headless: bool, storage_state=None) -> dict:
         args=STEALTH_ARGS,
         ignore_default_args=["--enable-automation"],
     )
-    if storage_state:
-        opts["storage_state"] = storage_state
-    return opts
 
 
 _INIT_SCRIPT = """
@@ -283,13 +286,13 @@ async def _setup_page(context):
 async def _ensure_login(work_dir: Path, playwright_instance):
     """Abre browser visible solo si es necesario hacer login. Cierra al terminar."""
     bdir = _browser_data_dir(work_dir)
-    saved_session = _load_session_path(work_dir)
 
     # Primero intentar headless con sesión guardada
     try:
         context = await playwright_instance.chromium.launch_persistent_context(
-            str(bdir), **_launch_args(headless=True, storage_state=saved_session),
+            str(bdir), **_launch_args(headless=True),
         )
+        await _restore_session(context, work_dir)
         page = await _setup_page(context)
         await page.goto(LOGIN_URL, wait_until="commit", timeout=30000)
         await asyncio.sleep(2)
@@ -341,10 +344,10 @@ async def login_and_scrape(work_dir: Path, courses: dict) -> dict:
 
         # Paso 2: scrapear en headless — invisible
         print("  Scrapeando en segundo plano...\n")
-        saved_session = _load_session_path(work_dir)
         context = await p.chromium.launch_persistent_context(
-            str(bdir), **_launch_args(headless=True, storage_state=saved_session),
+            str(bdir), **_launch_args(headless=True),
         )
+        await _restore_session(context, work_dir)
         page = await _setup_page(context)
 
         for slug, course_info in courses.items():
