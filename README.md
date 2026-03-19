@@ -74,7 +74,18 @@ pip install -e .
 
 ### Primera vez
 
-Simplemente ejecutá:
+> ⚠️ **Antes de empezar**: tené listos los links de la página de grabaciones de cada asignatura en Moodle.
+> Es la página donde ves la lista de grabaciones de Zoom con los botones "Ver grabación".
+> Solo se piden **una vez** durante la configuración inicial — después el CLI los usa automáticamente para descargar las grabaciones más recientes cada vez que lo ejecutes.
+
+#### ¿Cómo conseguir el link?
+
+1. Entrá a [UdeArroba](https://udearroba.udea.edu.co/)
+2. Abrí la asignatura
+3. Buscá la actividad de **Zoom** donde están las grabaciones
+4. Copiá la URL de esa página — es algo como `https://udearroba.udea.edu.co/mod/zoom/view.php?id=XXXXX`
+
+#### Ejecutar
 
 ```bash
 claude_udea
@@ -83,7 +94,7 @@ claude_udea
 Se va a:
 
 1. ✅ Verificar e instalar dependencias faltantes
-2. ✅ Pedir los links de Moodle de tus asignaturas
+2. ✅ Pedir los links de grabaciones de cada asignatura (solo la primera vez)
 3. ✅ Abrir un navegador para que inicies sesión en Moodle
 4. ✅ Scrapear las grabaciones automáticamente
 5. ✅ Descargar las transcripciones
