@@ -22,6 +22,13 @@ STEALTH_ARGS = [
     "--disable-blink-features=AutomationControlled",
     "--no-first-run",
     "--no-default-browser-check",
+    "--disable-infobars",
+    "--disable-extensions-except=",
+    "--disable-component-update",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    "--lang=es-CO",
 ]
 
 
@@ -50,29 +57,51 @@ def _kill_chromium():
             pass
 
 
+def _is_browser_locked(work_dir: Path) -> bool:
+    """Detecta si el perfil quedó trabado por un crash previo."""
+    lock_file = _browser_data_dir(work_dir) / "SingletonLock"
+    cookie_lock = _browser_data_dir(work_dir) / "SingletonCookie"
+    return lock_file.exists() or cookie_lock.exists()
+
+
 def force_clean(work_dir: Path):
-    """Mata procesos de Chromium y borra .browser-data de forma robusta."""
-    _kill_chromium()
-
+    """Solo limpia si hay un lock de crash. Preserva cookies y sesión."""
     bdir = _browser_data_dir(work_dir)
-    for _ in range(3):
-        if not bdir.exists():
-            return
-        try:
-            shutil.rmtree(bdir)
-            return
-        except Exception:
-            time.sleep(1)
 
-    # Fallback para Windows
-    if platform.system() == "Windows":
+    if not bdir.exists():
+        return
+
+    if not _is_browser_locked(work_dir):
+        return
+
+    # Hay un lock — matar procesos y limpiar locks
+    _kill_chromium()
+    time.sleep(1)
+
+    for lock in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        lock_path = bdir / lock
         try:
-            subprocess.run(
-                ["cmd", "/c", "rmdir", "/s", "/q", str(bdir)],
-                capture_output=True, timeout=10,
-            )
+            lock_path.unlink(missing_ok=True)
         except Exception:
             pass
+
+    # Si sigue trabado, borrar todo como último recurso
+    if _is_browser_locked(work_dir):
+        for _ in range(3):
+            try:
+                shutil.rmtree(bdir)
+                return
+            except Exception:
+                time.sleep(1)
+
+        if platform.system() == "Windows":
+            try:
+                subprocess.run(
+                    ["cmd", "/c", "rmdir", "/s", "/q", str(bdir)],
+                    capture_output=True, timeout=10,
+                )
+            except Exception:
+                pass
 
 
 async def _safe_goto(page, url):
@@ -187,5 +216,4 @@ async def login_and_scrape(work_dir: Path, courses: dict) -> dict:
 
         await context.close()
 
-    force_clean(work_dir)
     return results
