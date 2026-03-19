@@ -23,7 +23,7 @@ CHROME_UA = (
 )
 
 stealth = Stealth(
-    webdriver=True,
+    navigator_webdriver=True,
     webgl_vendor=True,
     chrome_app=True,
     chrome_csi=True,
@@ -31,16 +31,19 @@ stealth = Stealth(
     chrome_runtime=True,
     iframe_content_window=True,
     media_codecs=True,
-    navigator_hardware_concurrency=4,
+    navigator_hardware_concurrency=True,
     navigator_languages=True,
     navigator_permissions=True,
     navigator_platform=True,
     navigator_plugins=True,
     navigator_user_agent=True,
     navigator_vendor=True,
-    outerdimensions=True,
     hairline=True,
-    window_outerdimensions=True,
+    error_prototype=True,
+    sec_ch_ua=True,
+    navigator_languages_override=("es-CO", "es"),
+    navigator_platform_override="Win32",
+    navigator_user_agent_override=CHROME_UA,
 )
 
 # Args para que Chromium parezca un browser real
