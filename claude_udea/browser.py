@@ -212,16 +212,14 @@ async def login_and_scrape(work_dir: Path, courses: dict) -> dict:
         # Login listo — minimizar ventana para scrapear en segundo plano
         print("  ✔ Sesión detectada, scrapeando en segundo plano...\n")
         try:
-            cdp = context.browser
-            if cdp:
-                cdp_session = await cdp.new_browser_cdp_session()
-                # Obtener windowId de la ventana actual
-                resp = await cdp_session.send("Browser.getWindowForTarget")
-                window_id = resp["windowId"]
-                await cdp_session.send("Browser.setWindowBounds", {
-                    "windowId": window_id,
-                    "bounds": {"windowState": "minimized"},
-                })
+            cdp_session = await context.new_cdp_session(page)
+            resp = await cdp_session.send("Browser.getWindowForTarget")
+            window_id = resp["windowId"]
+            await cdp_session.send("Browser.setWindowBounds", {
+                "windowId": window_id,
+                "bounds": {"windowState": "minimized"},
+            })
+            await cdp_session.detach()
         except Exception:
             pass
 
