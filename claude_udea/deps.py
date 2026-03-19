@@ -37,6 +37,14 @@ def _check_claude_cli() -> bool:
     return shutil.which("claude") is not None
 
 
+def _check_npm() -> bool:
+    return shutil.which("npm") is not None
+
+
+def _check_node() -> bool:
+    return shutil.which("node") is not None
+
+
 def _pip_install(package: str):
     subprocess.run(
         [sys.executable, "-m", "pip", "install", package, "--quiet"],
@@ -47,6 +55,14 @@ def _pip_install(package: str):
 def _install_chromium():
     subprocess.run(
         [sys.executable, "-m", "playwright", "install", "chromium"],
+        check=True,
+    )
+
+
+def _install_claude_code():
+    """Instala Claude Code CLI vía npm."""
+    subprocess.run(
+        ["npm", "install", "-g", "@anthropic-ai/claude-code"],
         check=True,
     )
 
@@ -80,10 +96,27 @@ def check_and_install(auto=False):
     if not chromium_ok:
         print("    - chromium: Navegador para acceder a Moodle")
 
+    node_ok = _check_node()
+    npm_ok = _check_npm()
+
     if not claude_ok:
-        print("    - claude: CLI de Claude Code (npm install -g @anthropic-ai/claude-code)")
+        if npm_ok:
+            print("    - claude: CLI de Claude Code (se instalará con npm)")
+        elif not node_ok:
+            print("    - Node.js: Requerido para instalar Claude Code")
+            print("      → Instalá Node.js desde https://nodejs.org/ y volvé a ejecutar")
+        else:
+            print("    - npm: No encontrado (debería venir con Node.js)")
 
     print()
+
+    # Si falta Node.js y Claude Code, no podemos continuar
+    if not claude_ok and not node_ok:
+        print("  ⚠ Claude Code es necesario y requiere Node.js para instalarse.")
+        print("    1. Instalá Node.js desde https://nodejs.org/ (LTS recomendado)")
+        print("    2. Cerrá y reabrí la terminal")
+        print("    3. Ejecutá claude_udea de nuevo\n")
+        return False
 
     # Preguntar
     if not auto:
@@ -137,11 +170,16 @@ def check_and_install(auto=False):
             print(f"  ✖ Error instalando Chromium: {e}")
             return False
 
-    if not claude_ok:
-        print()
-        print("  ⚠ 'claude' (Claude Code CLI) no está instalado.")
-        print("    Instalalo con: npm install -g @anthropic-ai/claude-code")
-        print("    El programa funciona sin él, pero no abrirá Claude Code al final.\n")
+    # Instalar Claude Code si falta
+    if not claude_ok and npm_ok:
+        print("  Instalando Claude Code CLI...")
+        try:
+            _install_claude_code()
+            print("  ✔ Claude Code")
+        except Exception as e:
+            print(f"  ✖ Error instalando Claude Code: {e}")
+            print("    Intentá manualmente: npm install -g @anthropic-ai/claude-code\n")
+            return False
 
     print()
     return True
