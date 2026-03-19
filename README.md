@@ -1,79 +1,260 @@
-# UdeA Zoom Recording Downloader
+<p align="center">
+  <h1 align="center">🎓 claude_udea</h1>
+  <p align="center">
+    <strong>Tu asistente académico con IA para la Universidad de Antioquia</strong>
+  </p>
+  <p align="center">
+    Descarga automática de transcripciones de Zoom desde Moodle → Análisis con Claude Code
+  </p>
+  <p align="center">
+    <img src="https://img.shields.io/badge/python-≥3.10-blue?style=flat-square&logo=python&logoColor=white" alt="Python">
+    <img src="https://img.shields.io/badge/Claude_Code-CLI-orange?style=flat-square&logo=anthropic&logoColor=white" alt="Claude Code">
+    <img src="https://img.shields.io/badge/plataforma-Windows_|_macOS_|_Linux-green?style=flat-square" alt="Cross-platform">
+  </p>
+</p>
 
-Descarga automática e incremental de grabaciones Zoom desde Moodle (UdeArroba).
+---
 
-## Estructura de Archivos
+## ¿Qué es?
+
+`claude_udea` es una herramienta de línea de comandos que:
+
+1. **🔍 Scrapea** las grabaciones de Zoom desde Moodle (UdeArroba)
+2. **📥 Descarga** las transcripciones (y opcionalmente los videos)
+3. **🤖 Abre Claude Code** como asistente académico personalizado con tus clases
+
+Todo en un solo comando: `claude_udea`
+
+---
+
+## ✨ Características
+
+- **Setup interactivo** — la primera vez te guía para configurar tus asignaturas
+- **Instalación automática** — detecta e instala dependencias faltantes (incluido Claude Code)
+- **Sesión persistente** — guarda tu sesión de Moodle para no pedir login cada vez
+- **Scraping invisible** — después del login, el navegador se oculta mientras trabaja
+- **Descarga incremental** — nunca re-descarga lo que ya tenés
+- **Deduplicación inteligente** — identifica grabaciones por fecha, sin duplicados
+- **Cross-platform** — funciona en Windows, macOS y Linux
+- **Skills de Claude** — comandos especializados para estudiar con IA
+
+---
+
+## 📋 Requisitos previos
+
+| Requisito | Para qué | Cómo instalar |
+|-----------|----------|---------------|
+| **Python ≥ 3.10** | Ejecutar la herramienta | [python.org](https://www.python.org/downloads/) |
+| **Node.js ≥ 18** | Instalar Claude Code | [nodejs.org](https://nodejs.org/) (LTS) |
+| **Git** | Clonar el repositorio | [git-scm.com](https://git-scm.com/) |
+
+> 💡 Las demás dependencias (Playwright, Chromium, Claude Code, etc.) se instalan automáticamente en la primera ejecución.
+
+---
+
+## 🚀 Instalación
+
+### Opción 1: Desde GitHub (recomendado)
+
+```bash
+pip install git+https://github.com/gjcardonam/claude-udea.git
+```
+
+### Opción 2: Clonar y desarrollo local
+
+```bash
+git clone https://github.com/gjcardonam/claude-udea.git
+cd claude-udea
+pip install -e .
+```
+
+---
+
+## 🎯 Uso
+
+### Primera vez
+
+Simplemente ejecutá:
+
+```bash
+claude_udea
+```
+
+Se va a:
+
+1. ✅ Verificar e instalar dependencias faltantes
+2. ✅ Pedir los links de Moodle de tus asignaturas
+3. ✅ Abrir un navegador para que inicies sesión en Moodle
+4. ✅ Scrapear las grabaciones automáticamente
+5. ✅ Descargar las transcripciones
+6. ✅ Abrir Claude Code como tu asistente académico
+
+### Ejecuciones siguientes
+
+```bash
+claude_udea              # Actualiza todo y abre Claude Code
+```
+
+Si tu sesión de Moodle sigue activa, **no abre ningún navegador** — todo corre en segundo plano.
+
+### Opciones
+
+```bash
+claude_udea --status          # Ver estado de descargas por asignatura
+claude_udea --skip-scrape     # Solo descargar (sin re-scrapear Moodle)
+claude_udea --skip-video      # Solo transcripciones (sin preguntar)
+claude_udea --all             # Video + transcripciones (sin preguntar)
+claude_udea --dry-run         # Simular sin descargar nada
+claude_udea --add-course      # Agregar una nueva asignatura
+```
+
+### Filtrar por asignatura
+
+```bash
+claude_udea calidad-de-software          # Solo una asignatura
+claude_udea ingenieria-web optimizacion  # Varias específicas
+```
+
+---
+
+## 🤖 Skills de Claude Code
+
+Una vez dentro de Claude Code, tenés comandos especializados:
+
+| Comando | Qué hace |
+|---------|----------|
+| `/enseñar [tema]` | Enseña un tema visto en clase con referencias a la grabación y minuto |
+| `/pendientes` | Lista todos los compromisos: parciales, tareas, quices, entregas |
+| `/planear` | Ayuda a organizar tu tiempo y crear horarios de estudio |
+| `/buscar [término]` | Busca una palabra o frase en todas las transcripciones |
+| `/temas` | Muestra todos los temas vistos, organizados cronológicamente |
+| `/ejemplos [tema]` | Da ejemplos prácticos sobre un tema de clase |
+| `/taller` | Ayuda a resolver un taller con base en lo visto en clase |
+
+### Ejemplo de uso
 
 ```
-zoom-downloader/
-├── config.json          # Configuración de asignaturas y URLs
-├── scraper.py           # Extrae links de Zoom desde Moodle
-├── downloader.py        # Descarga grabaciones con yt-dlp
-├── run.ps1              # Script principal (PowerShell)
-├── requirements.txt
-├── recordings.json      # [auto] Links extraídos por el scraper
-├── .browser-data/       # [auto] Cookies de Playwright
-└── downloads/           # [auto] Grabaciones descargadas
-    ├── calidad-de-software/
-    │   ├── Grabacion 1.mp4
-    │   ├── Grabacion 1.es.vtt    ← Transcripción
-    │   └── Grabacion 2.mp4
+> /pendientes
+
+📋 Compromisos encontrados:
+
+  ✦ Parcial 2 - Calidad de Software
+    📅 2026-03-25 | calidad-clase-15.vtt | ~min 45
+    "El parcial va a ser sobre testing y métricas"
+
+  ✦ Entrega Taller 3 - Ingeniería Web
+    📅 2026-03-28 | ingenieria-clase-12.vtt | ~min 32
+    "El taller es en grupos de 3, entrega por Moodle"
+```
+
+---
+
+## 📁 Estructura de archivos
+
+```
+~/claude-udea/                    # macOS/Linux
+C:\claude-udea\                   # Windows
+├── CLAUDE.md                     # Instrucciones para Claude Code (auto-generado)
+├── config.json                   # Tus asignaturas configuradas
+├── recordings.json               # Registro de grabaciones encontradas
+├── .session-state.json           # Sesión de Moodle (cookies)
+├── .browser-data/                # Perfil del navegador
+├── .claude/
+│   ├── rules.md                  # Reglas del asistente
+│   └── skills/                   # Comandos disponibles
+│       ├── enseñar.md
+│       ├── pendientes.md
+│       ├── planear.md
+│       ├── buscar.md
+│       ├── temas.md
+│       ├── ejemplos.md
+│       └── taller.md
+└── downloads/
+    ├── calidad-de-software/      # Archivos descargados por asignatura
     ├── ingenieria-web/
-    ├── optimizacion/
-    ├── seguridad-de-la-informacion/
-    └── transcripts/              ← Copia centralizada de transcripciones
+    └── transcripts/              # Transcripciones organizadas
+        ├── index.json            # Índice por fecha y asignatura
         ├── calidad-de-software/
-        │   └── Grabacion 1.es.vtt
-        └── ...
+        │   ├── 2026-03-09_Clase 15 [...].vtt
+        │   └── 2026-03-12_Clase 16 [...].vtt
+        └── ingenieria-web/
+            └── ...
 ```
 
-## Setup
+---
 
-```powershell
-# 1. Instalar dependencias
-pip install -r requirements.txt
+## 🔧 Cómo funciona
 
-# 2. Instalar browser para Playwright
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────────┐
+│   Moodle     │────▶│   Scraping    │────▶│  Descarga    │────▶│  Claude Code  │
+│   (UdeArroba)│     │  (Playwright) │     │  (yt-dlp)    │     │  (Asistente)  │
+└─────────────┘     └──────────────┘     └─────────────┘     └──────────────┘
+       │                    │                    │                     │
+   Login SSO          Busca links          Baja VTTs           Lee transcripciones
+   (una vez)         de grabaciones     + metadata fecha       y responde preguntas
+```
+
+1. **Scraping**: Playwright abre Moodle con stealth anti-detección, extrae los links de las grabaciones de Zoom de cada asignatura
+2. **Descarga**: yt-dlp descarga las transcripciones (`.vtt`) y opcionalmente los videos. Cada VTT se enriquece con metadata (fecha, asignatura, duración)
+3. **Claude Code**: Se abre con un `CLAUDE.md` personalizado que le dice qué asignaturas tenés, dónde están las transcripciones, y cómo responder
+
+---
+
+## 🔒 Privacidad y seguridad
+
+- Tus credenciales de Moodle **nunca se guardan** — el login es manual en un navegador real
+- Las cookies de sesión se guardan localmente en `.session-state.json`
+- Todo se procesa localmente en tu máquina
+- Las transcripciones nunca se suben a ningún servidor externo
+- Claude Code lee los archivos locales directamente
+
+---
+
+## ❓ Solución de problemas
+
+### "Claude Code no está instalado"
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### "Playwright no encuentra Chromium"
+```bash
 python -m playwright install chromium
 ```
 
-## Uso
+### "La sesión de Moodle siempre expira"
+Es normal que expire después de varias horas. Al ejecutar `claude_udea` de nuevo, te pedirá login solo si es necesario.
 
-### Opción 1: Script todo-en-uno (recomendado)
-```powershell
-.\run.ps1                                    # Scrape + descarga todo
-.\run.ps1 -Course "calidad-de-software"      # Solo una asignatura
-.\run.ps1 -SkipScrape                        # Solo descarga (sin re-scrape)
-.\run.ps1 -DryRun                            # Simular sin descargar
-.\run.ps1 -Status                            # Ver estado
+### "Se descargan grabaciones duplicadas"
+Esto se corrigió automáticamente. Si tenés datos viejos, borrá `recordings.json` y ejecutá de nuevo:
+```bash
+# Windows
+del C:\claude-udea\recordings.json
+
+# macOS/Linux
+rm ~/claude-udea/recordings.json
 ```
 
-### Opción 2: Paso a paso
-```powershell
-# Fase 1: Extraer links (abre browser, login manual la primera vez)
-python scraper.py
+### Resetear todo
+```bash
+# Windows
+rmdir /s /q C:\claude-udea\downloads C:\claude-udea\.browser-data
+del C:\claude-udea\recordings.json C:\claude-udea\.session-state.json
 
-# Fase 2: Descargar grabaciones
-python downloader.py
-
-# Ver estado
-python downloader.py --status
+# macOS/Linux
+rm -rf ~/claude-udea/downloads ~/claude-udea/.browser-data
+rm ~/claude-udea/recordings.json ~/claude-udea/.session-state.json
 ```
 
-## Idempotencia
+---
 
-- El scraper hace **merge incremental**: no pierde links anteriores al re-ejecutar.
-- El downloader usa `--download-archive` de yt-dlp: nunca re-descarga un archivo ya bajado.
-- Podés ejecutar `.\run.ps1` cuantas veces quieras, solo descarga lo nuevo.
+## 📄 Licencia
 
-## Para el Agente de IA
+MIT
 
-Las transcripciones están centralizadas en `downloads/transcripts/` organizadas por asignatura.
-Cada archivo `.vtt` es parseable como texto plano (formato WebVTT con timestamps).
+---
 
-## Notas
-
-- El primer `scraper.py` abre un browser real para login manual en Moodle.
-- Las cookies se guardan en `.browser-data/` para sesiones futuras.
-- Si la sesión de Moodle expira, el scraper detecta y pide login de nuevo.
-- yt-dlp se encarga de nombrar los archivos según el título de la grabación en Zoom.
+<p align="center">
+  Hecho con ☕ para estudiantes de la <strong>Universidad de Antioquia</strong>
+</p>
