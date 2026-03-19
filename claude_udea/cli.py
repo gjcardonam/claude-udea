@@ -460,8 +460,14 @@ def main():
         choice = questionary.select(
             "¿Qué deseas descargar?",
             choices=[
-                questionary.Choice("Solo transcripciones  (rápido)", value="transcripts"),
-                questionary.Choice("Video + transcripciones  (varios GB)", value="all"),
+                questionary.Choice(
+                    title=[("fg:ansicyan bold", "⚡ Solo transcripciones"), ("", "  (rápido)")],
+                    value="transcripts",
+                ),
+                questionary.Choice(
+                    title=[("fg:ansiyellow bold", "🎬 Video + transcripciones"), ("", "  (varios GB)")],
+                    value="all",
+                ),
             ],
             style=Style([("highlighted", "bold"), ("pointer", "bold")]),
             instruction="(↑↓ mover, Enter seleccionar)",
