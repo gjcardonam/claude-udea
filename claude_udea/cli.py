@@ -181,7 +181,34 @@ def load_config(work_dir: Path):
 def load_recordings(path: Path) -> dict:
     if path.exists():
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        # Deduplicar por start_date dentro de cada curso
+        changed = False
+        for slug, course in data.items():
+            recs = course.get("recordings", {})
+            seen_dates = {}
+            to_remove = []
+            for rec_id, rec_info in recs.items():
+                sd = rec_info.get("start_date", "")
+                if not sd:
+                    continue
+                if sd in seen_dates:
+                    # Mantener el que ya fue descargado, o el primero
+                    existing_id = seen_dates[sd]
+                    if rec_info.get("downloaded") and not recs[existing_id].get("downloaded"):
+                        to_remove.append(existing_id)
+                        seen_dates[sd] = rec_id
+                    else:
+                        to_remove.append(rec_id)
+                else:
+                    seen_dates[sd] = rec_id
+            for rid in to_remove:
+                del recs[rid]
+                changed = True
+        if changed:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        return data
     return {}
 
 
@@ -250,20 +277,37 @@ def fase_scraping(work_dir, config, recordings_path, target_courses):
             }
 
         course_data = existing[slug]
+        # Índice de start_dates existentes para deduplicar
+        known_dates = {
+            rec["start_date"]
+            for rec in course_data["recordings"].values()
+            if rec.get("start_date")
+        }
         for link in links:
             rec_id = extract_recording_id(link["url"])
-            if rec_id not in course_data["recordings"]:
-                course_data["recordings"][rec_id] = {
-                    "url": link["full_url"],
-                    "share_url": link["url"],
-                    "title": link.get("topic") or link["text"],
-                    "meeting_id": link.get("meeting_id", ""),
-                    "start_date": link.get("start_date", ""),
-                    "duration_minutes": link.get("duration_minutes", 0),
-                    "scraped_at": datetime.now().isoformat(),
-                    "downloaded": False,
-                }
-                total_new += 1
+            start_date = link.get("start_date", "")
+
+            # Duplicado si ya existe por rec_id O por start_date
+            if rec_id in course_data["recordings"]:
+                # Actualizar URL por si cambió el share token
+                course_data["recordings"][rec_id]["url"] = link["full_url"]
+                course_data["recordings"][rec_id]["share_url"] = link["url"]
+                continue
+            if start_date and start_date in known_dates:
+                continue
+
+            course_data["recordings"][rec_id] = {
+                "url": link["full_url"],
+                "share_url": link["url"],
+                "title": link.get("topic") or link["text"],
+                "meeting_id": link.get("meeting_id", ""),
+                "start_date": start_date,
+                "duration_minutes": link.get("duration_minutes", 0),
+                "scraped_at": datetime.now().isoformat(),
+                "downloaded": False,
+            }
+            known_dates.add(start_date)
+            total_new += 1
         course_data["last_scraped"] = datetime.now().isoformat()
 
     save_recordings(recordings_path, existing)
