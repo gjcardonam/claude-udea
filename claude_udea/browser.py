@@ -4,6 +4,7 @@ Aislado para que cambios en otras partes no lo afecten.
 """
 
 import asyncio
+import json
 import platform
 import subprocess
 import shutil
@@ -65,6 +66,28 @@ STEALTH_ARGS = [
 
 def _browser_data_dir(work_dir: Path) -> Path:
     return work_dir / ".browser-data"
+
+
+def _session_file(work_dir: Path) -> Path:
+    return work_dir / ".session-state.json"
+
+
+async def _save_session(context, work_dir: Path):
+    """Guarda cookies y localStorage a archivo para persistir sesiones."""
+    try:
+        state = await context.storage_state()
+        with open(_session_file(work_dir), "w", encoding="utf-8") as f:
+            json.dump(state, f)
+    except Exception:
+        pass
+
+
+def _load_session_path(work_dir: Path):
+    """Retorna path al archivo de sesión si existe, None si no."""
+    path = _session_file(work_dir)
+    if path.exists():
+        return str(path)
+    return None
 
 
 def _kill_chromium():
@@ -207,9 +230,9 @@ async def scrape_all(work_dir: Path, courses: dict) -> dict:
     return {}
 
 
-def _launch_args(headless: bool) -> dict:
+def _launch_args(headless: bool, storage_state=None) -> dict:
     """Parámetros comunes para launch_persistent_context."""
-    return dict(
+    opts = dict(
         headless=headless,
         viewport={"width": 1366, "height": 768},
         screen={"width": 1920, "height": 1080},
@@ -220,6 +243,9 @@ def _launch_args(headless: bool) -> dict:
         args=STEALTH_ARGS,
         ignore_default_args=["--enable-automation"],
     )
+    if storage_state:
+        opts["storage_state"] = storage_state
+    return opts
 
 
 _INIT_SCRIPT = """
@@ -257,11 +283,12 @@ async def _setup_page(context):
 async def _ensure_login(work_dir: Path, playwright_instance):
     """Abre browser visible solo si es necesario hacer login. Cierra al terminar."""
     bdir = _browser_data_dir(work_dir)
+    saved_session = _load_session_path(work_dir)
 
-    # Primero intentar headless para ver si la sesión persiste
+    # Primero intentar headless con sesión guardada
     try:
         context = await playwright_instance.chromium.launch_persistent_context(
-            str(bdir), **_launch_args(headless=True),
+            str(bdir), **_launch_args(headless=True, storage_state=saved_session),
         )
         page = await _setup_page(context)
         await page.goto(LOGIN_URL, wait_until="commit", timeout=30000)
@@ -277,13 +304,14 @@ async def _ensure_login(work_dir: Path, playwright_instance):
             except Exception:
                 is_logged_in = False
 
-        await context.close()
-
         if is_logged_in:
+            await _save_session(context, work_dir)
+            await context.close()
             print("  ✔ Sesión activa (login no necesario)\n")
             return
+
+        await context.close()
     except Exception:
-        # Si falla headless, seguir con visible
         try:
             await context.close()
         except Exception:
@@ -296,6 +324,7 @@ async def _ensure_login(work_dir: Path, playwright_instance):
     page = await _setup_page(context)
     await _safe_goto(page, LOGIN_URL)
     await _wait_for_login(page)
+    await _save_session(context, work_dir)
     print("  ✔ Sesión guardada\n")
     await context.close()
 
@@ -312,8 +341,9 @@ async def login_and_scrape(work_dir: Path, courses: dict) -> dict:
 
         # Paso 2: scrapear en headless — invisible
         print("  Scrapeando en segundo plano...\n")
+        saved_session = _load_session_path(work_dir)
         context = await p.chromium.launch_persistent_context(
-            str(bdir), **_launch_args(headless=True),
+            str(bdir), **_launch_args(headless=True, storage_state=saved_session),
         )
         page = await _setup_page(context)
 

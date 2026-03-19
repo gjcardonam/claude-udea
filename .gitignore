@@ -6,6 +6,7 @@ downloads/
 # Datos de sesión
 .browser-data/
 .cookies.json
+.session-state.json
 recordings.json
 
 # Python
