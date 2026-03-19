@@ -59,6 +59,7 @@ STEALTH_ARGS = [
     "--disable-dev-shm-usage",
     "--lang=es-CO",
     "--window-size=1366,768",
+    "--window-position=100,100",
 ]
 
 
