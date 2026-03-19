@@ -15,20 +15,47 @@ from playwright_stealth import Stealth
 
 LOGIN_URL = "https://udearroba.udea.edu.co/internos/my/"
 
-stealth = Stealth()
+# User agent real de Chrome estable (no el de Playwright/Chromium)
+CHROME_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
 
-# Args para que Chromium parezca un browser normal
+stealth = Stealth(
+    webdriver=True,
+    webgl_vendor=True,
+    chrome_app=True,
+    chrome_csi=True,
+    chrome_load_times=True,
+    chrome_runtime=True,
+    iframe_content_window=True,
+    media_codecs=True,
+    navigator_hardware_concurrency=4,
+    navigator_languages=True,
+    navigator_permissions=True,
+    navigator_platform=True,
+    navigator_plugins=True,
+    navigator_user_agent=True,
+    navigator_vendor=True,
+    outerdimensions=True,
+    hairline=True,
+    window_outerdimensions=True,
+)
+
+# Args para que Chromium parezca un browser real
 STEALTH_ARGS = [
     "--disable-blink-features=AutomationControlled",
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-infobars",
-    "--disable-extensions-except=",
     "--disable-component-update",
     "--disable-background-timer-throttling",
     "--disable-backgrounding-occluded-windows",
     "--disable-renderer-backgrounding",
+    "--disable-dev-shm-usage",
     "--lang=es-CO",
+    "--window-size=1366,768",
 ]
 
 
@@ -186,13 +213,48 @@ async def login_and_scrape(work_dir: Path, courses: dict) -> dict:
         context = await p.chromium.launch_persistent_context(
             str(bdir),
             headless=False,
-            viewport={"width": 1280, "height": 800},
+            viewport={"width": 1366, "height": 768},
+            screen={"width": 1920, "height": 1080},
             locale="es-CO",
+            timezone_id="America/Bogota",
+            user_agent=CHROME_UA,
+            color_scheme="light",
             args=STEALTH_ARGS,
             ignore_default_args=["--enable-automation"],
         )
         page = context.pages[0] if context.pages else await context.new_page()
         await stealth.apply_stealth_async(page)
+
+        # Parches extra anti-detección
+        await page.add_init_script("""
+            // Ocultar que es Playwright/automation
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+
+            // Chrome real tiene window.chrome
+            if (!window.chrome) {
+                window.chrome = {runtime: {}, loadTimes: function(){}, csi: function(){}};
+            }
+
+            // Plugins reales (Chrome siempre tiene al menos estos)
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => {
+                    const plugins = [
+                        {name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer'},
+                        {name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
+                        {name: 'Native Client', filename: 'internal-nacl-plugin'},
+                    ];
+                    plugins.length = 3;
+                    return plugins;
+                }
+            });
+
+            // Permissions API consistente
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (params) =>
+                params.name === 'notifications'
+                    ? Promise.resolve({state: Notification.permission})
+                    : originalQuery(params);
+        """)
 
         # Login
         await _safe_goto(page, LOGIN_URL)
