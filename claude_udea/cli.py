@@ -358,12 +358,15 @@ def fase_descarga(config, recordings, target_courses, skip_video, dry_run):
     )
 
     total_failed = 0
+    total_processing = 0
     for slug, rec_id, rec_info, url in pbar:
         course_dir = download_dir / slug
-        ok = download_one(url, course_dir, archive_path, skip_video, dry_run)
-        if ok:
+        status = download_one(url, course_dir, archive_path, skip_video, dry_run)
+        if status == "ok":
             rec_info["downloaded"] = True
             rec_info["downloaded_at"] = datetime.now().isoformat()
+        elif status == "processing":
+            total_processing += 1
         else:
             total_failed += 1
 
@@ -373,8 +376,16 @@ def fase_descarga(config, recordings, target_courses, skip_video, dry_run):
         recordings_path = Path(config["recordings_file"])
         save_recordings(recordings_path, recordings)
 
+    ok_count = len(pending) - total_failed - total_processing
+    parts = []
+    if ok_count:
+        parts.append(f"{ok_count} descargadas")
+    if total_processing:
+        parts.append(f"{total_processing} aún procesándose en Zoom")
     if total_failed:
-        print(f"\n  ✔ {len(pending) - total_failed} descargadas, {total_failed} fallidas\n")
+        parts.append(f"{total_failed} fallidas")
+    if parts:
+        print(f"\n  ✔ {', '.join(parts)}\n")
     else:
         print(f"\n  ✔ Listo\n")
 
@@ -535,5 +546,5 @@ def main():
     failed = fase_descarga(config, recordings, target_courses, skip_video, dry_run)
 
     # Fase 3
-    if not dry_run and failed == 0:
+    if not dry_run:
         fase_final(config, recordings, target_courses)

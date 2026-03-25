@@ -24,7 +24,7 @@ def is_downloaded(archive_path: Path, rec_id: str) -> bool:
 
 
 def download_one(url, output_dir, archive_path, skip_video=False, dry_run=False):
-    """Descarga una grabación. Retorna True si OK."""
+    """Descarga una grabación. Retorna 'ok', 'processing' o 'error'."""
     output_dir.mkdir(parents=True, exist_ok=True)
     output_template = str(output_dir / "%(title)s [%(id)s].%(ext)s")
 
@@ -55,16 +55,23 @@ def download_one(url, output_dir, archive_path, skip_video=False, dry_run=False)
             cmd, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=600,
         )
-        ok = result.returncode == 0
-        # yt-dlp con --skip-download no escribe al archive, hacerlo manualmente
-        if ok and skip_video and not dry_run:
-            rec_id = _extract_rec_id_from_url(url)
-            if rec_id and not is_downloaded(archive_path, rec_id):
-                with open(archive_path, "a", encoding="utf-8") as f:
-                    f.write(f"zoomus {rec_id}\n")
-        return ok
+        if result.returncode == 0:
+            # yt-dlp con --skip-download no escribe al archive, hacerlo manualmente
+            if skip_video and not dry_run:
+                rec_id = _extract_rec_id_from_url(url)
+                if rec_id and not is_downloaded(archive_path, rec_id):
+                    with open(archive_path, "a", encoding="utf-8") as f:
+                        f.write(f"zoomus {rec_id}\n")
+            return "ok"
+        # Zoom aún procesando o página no disponible
+        stderr = result.stderr or ""
+        if "Unable to extract" in stderr or "is not a valid URL" in stderr:
+            return "processing"
+        return "error"
+    except subprocess.TimeoutExpired:
+        return "error"
     except Exception:
-        return False
+        return "error"
 
 
 def _extract_rec_id_from_url(url: str) -> str:
