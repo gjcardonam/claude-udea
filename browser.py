@@ -18,7 +18,7 @@ def force_clean():
     # Matar cualquier Chromium residual
     try:
         subprocess.run(
-            ["taskkill", "/F", "/IM", "chromium.exe"],
+            ["pkill", "-f", "chromium"],
             capture_output=True, timeout=5,
         )
     except Exception:
@@ -34,15 +34,6 @@ def force_clean():
         except Exception:
             import time
             time.sleep(1)
-
-    # Último recurso: borrar con cmd
-    try:
-        subprocess.run(
-            ["cmd", "/c", "rmdir", "/s", "/q", str(BROWSER_DATA_DIR)],
-            capture_output=True, timeout=10,
-        )
-    except Exception:
-        pass
 
 
 async def _safe_goto(page, url):
