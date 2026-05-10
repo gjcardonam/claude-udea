@@ -191,32 +191,6 @@ def load_recordings(path: Path) -> dict:
     if path.exists():
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        # Deduplicar por start_date dentro de cada curso
-        changed = False
-        for slug, course in data.items():
-            recs = course.get("recordings", {})
-            seen_dates = {}
-            to_remove = []
-            for rec_id, rec_info in recs.items():
-                sd = rec_info.get("start_date", "")
-                if not sd:
-                    continue
-                if sd in seen_dates:
-                    # Mantener el que ya fue descargado, o el primero
-                    existing_id = seen_dates[sd]
-                    if rec_info.get("downloaded") and not recs[existing_id].get("downloaded"):
-                        to_remove.append(existing_id)
-                        seen_dates[sd] = rec_id
-                    else:
-                        to_remove.append(rec_id)
-                else:
-                    seen_dates[sd] = rec_id
-            for rid in to_remove:
-                del recs[rid]
-                changed = True
-        if changed:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
         return data
     return {}
 
@@ -277,11 +251,6 @@ def _merge_scraped(existing, config, slug, links):
         }
 
     course_data = existing[slug]
-    known_dates = {
-        rec["start_date"]
-        for rec in course_data["recordings"].values()
-        if rec.get("start_date")
-    }
 
     new_pending = []
     for link in links:
@@ -291,8 +260,6 @@ def _merge_scraped(existing, config, slug, links):
         if rec_id in course_data["recordings"]:
             course_data["recordings"][rec_id]["url"] = link["full_url"]
             course_data["recordings"][rec_id]["share_url"] = link["url"]
-            continue
-        if start_date and start_date in known_dates:
             continue
 
         rec_info = {
@@ -306,7 +273,6 @@ def _merge_scraped(existing, config, slug, links):
             "downloaded": False,
         }
         course_data["recordings"][rec_id] = rec_info
-        known_dates.add(start_date)
         url = rec_info.get("url") or rec_info.get("share_url", "")
         if url:
             new_pending.append((slug, rec_id, rec_info, url))
@@ -322,7 +288,7 @@ def fase_scraping_y_descarga(work_dir, config, recordings_path, target_courses, 
     Todo con un solo ThreadPoolExecutor.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
-    from claude_udea.auth import login, _scrape_one
+    from claude_udea.auth import is_ingenia_url, login, _scrape_one
     from claude_udea.download import get_archive_path, is_downloaded, download_one
     from tqdm import tqdm
 
@@ -331,11 +297,17 @@ def fase_scraping_y_descarga(work_dir, config, recordings_path, target_courses, 
     archive_path = get_archive_path(download_dir)
 
     courses_to_scrape = {slug: config["courses"][slug] for slug in target_courses}
+    needs_moodle_login = any(
+        not is_ingenia_url(info.get("moodle_url", ""))
+        for info in courses_to_scrape.values()
+    )
 
     # Login solo si vamos a scrapear
     session = None
-    if not skip_scrape:
+    if not skip_scrape and needs_moodle_login:
         session = login(work_dir)
+    elif not skip_scrape:
+        print("  Solo fuentes Ingenia — no se requiere login en Moodle.\n")
 
     # Contar ya descargadas
     already = 0
@@ -464,11 +436,12 @@ def fase_scraping_y_descarga(work_dir, config, recordings_path, target_courses, 
 # ─── Fase 3: Validación + Asistente AI ────────────────────
 
 def _get_assistant(config) -> str:
-    """Retorna 'claude' o 'gemini' segun la config."""
+    """Retorna el asistente configurado."""
     return config.get("assistant", "claude")
 
 
-def fase_final(config, recordings, target_courses):
+def fase_final(config, recordings, target_courses, assistant_override: str | None = None,
+               ollama_model: str | None = None):
     from claude_udea.download import copy_transcripts, count_transcripts
 
     download_dir = Path(config["download_dir"])
@@ -510,7 +483,25 @@ def fase_final(config, recordings, target_courses):
     )
 
     work_dir = download_dir.parent
-    assistant = _get_assistant(config)
+    assistant = assistant_override or _get_assistant(config)
+
+    if assistant == "none":
+        print("  Modo sin asistente: no se abre Claude Code ni Gemini.")
+        print(f"  Tus .vtt estan en:\n    {transcripts_dir.resolve()}\n")
+        print(f"  Guia de tono y tareas: {work_dir / 'CLAUDE.md'}\n")
+        return
+
+    if assistant == "ollama":
+        from claude_udea.ollama_chat import run_session
+
+        summary_for_ollama = "\n".join(summary_lines) if summary_lines else ""
+        run_session(
+            work_dir,
+            transcripts_dir,
+            ollama_model,
+            session_summary=summary_for_ollama or None,
+        )
+        return
 
     if assistant == "gemini":
         cmd = ["gemini"]
@@ -531,9 +522,18 @@ def fase_final(config, recordings, target_courses):
 # ─── Main ────────────────────────────────────────────────────
 
 def main():
+    from claude_udea.ollama_chat import parse_ollama_model_flag
+
+    args, ollama_cli_model = parse_ollama_model_flag(sys.argv[1:])
+    use_ollama = "--ollama" in args
+    no_assistant = "--no-assistant" in args or "--no-claude" in args
+
     # Validar dependencias
     from claude_udea.deps import check_and_install
-    if not check_and_install():
+    if not check_and_install(
+        require_assistant=not (use_ollama or no_assistant),
+        ollama_cli=use_ollama,
+    ):
         sys.exit(1)
 
     import questionary
@@ -549,7 +549,6 @@ def main():
     archive_path = get_archive_path(download_dir)
 
     # Flags
-    args = sys.argv[1:]
     dry_run = "--dry-run" in args
     status_only = "--status" in args
     skip_scrape = "--skip-scrape" in args
@@ -565,6 +564,12 @@ def main():
         return
 
     course_args = [a for a in args if not a.startswith("--")]
+    if use_ollama:
+        assistant_override = "ollama"
+    elif no_assistant:
+        assistant_override = "none"
+    else:
+        assistant_override = None
     all_courses = list(config["courses"].keys())
 
     for slug in course_args:
@@ -630,4 +635,10 @@ def main():
 
     # Organizar transcripciones + Claude Code
     if not dry_run:
-        fase_final(config, recordings, target_courses)
+        fase_final(
+            config,
+            recordings,
+            target_courses,
+            assistant_override=assistant_override,
+            ollama_model=ollama_cli_model,
+        )

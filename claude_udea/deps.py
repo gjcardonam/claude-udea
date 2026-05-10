@@ -1,6 +1,7 @@
 """Validacion e instalacion de dependencias."""
 
 import json
+import platform
 import subprocess
 import sys
 import shutil
@@ -25,6 +26,11 @@ ASSISTANTS = {
         "bin": "gemini",
         "npm": "@google/gemini-cli",
         "desc": "Gemini CLI (Google) — gratis, 1000 req/dia con cuenta Google",
+    },
+    "ollama": {
+        "bin": "ollama",
+        "npm": None,
+        "desc": "Ollama — modelos locales en tu maquina (gratis)",
     },
 }
 
@@ -57,6 +63,70 @@ def _install_npm_package(package: str):
         ["npm", "install", "-g", package],
         check=True,
     )
+
+
+def _ollama_on_path() -> bool:
+    return shutil.which("ollama") is not None
+
+
+def _install_ollama() -> bool:
+    """Intenta instalar el CLI de Ollama según el sistema operativo."""
+    system = platform.system()
+    print("  Instalando Ollama (puede pedir contraseña de administrador)...")
+    try:
+        if system == "Linux":
+            subprocess.run(
+                "curl -fsSL https://ollama.com/install.sh | sh",
+                shell=True,
+                check=True,
+            )
+        elif system == "Darwin":
+            if shutil.which("brew"):
+                subprocess.run(["brew", "install", "ollama"], check=True)
+            else:
+                subprocess.run(
+                    "curl -fsSL https://ollama.com/install.sh | sh",
+                    shell=True,
+                    check=True,
+                )
+        elif system == "Windows":
+            if shutil.which("winget"):
+                subprocess.run(
+                    [
+                        "winget",
+                        "install",
+                        "-e",
+                        "--id",
+                        "Ollama.Ollama",
+                        "--accept-package-agreements",
+                        "--accept-source-agreements",
+                    ],
+                    check=True,
+                )
+            else:
+                print(
+                    "  ! No se encontro winget. Instala Ollama desde https://ollama.com/download"
+                )
+                return False
+        else:
+            print("  ! Instala Ollama manualmente desde https://ollama.com/download")
+            return False
+    except subprocess.CalledProcessError as e:
+        print(f"  Error en la instalacion de Ollama: {e}")
+        print("  Proba manualmente: https://ollama.com/download")
+        return False
+    except OSError as e:
+        print(f"  Error ejecutando el instalador de Ollama: {e}")
+        return False
+
+    if _ollama_on_path():
+        print("  OK ollama")
+        return True
+    print(
+        "  Ollama pudo instalarse pero no esta en el PATH. "
+        "Cerrá y abrí la terminal, o agrega Ollama al PATH."
+    )
+    return False
 
 
 def _get_work_dir() -> Path:
@@ -118,6 +188,13 @@ def _choose_assistant() -> str:
                     ],
                     value="claude",
                 ),
+                questionary.Choice(
+                    title=[
+                        ("fg:ansiyellow bold", "Ollama"),
+                        ("", "  — modelos locales, gratis (CLI ollama)"),
+                    ],
+                    value="ollama",
+                ),
             ],
             style=style,
             instruction="",
@@ -129,15 +206,24 @@ def _choose_assistant() -> str:
     except ImportError:
         print("\n  Elige tu asistente de IA:\n")
         print("  1. Gemini CLI  — gratis, 1000 req/dia con cuenta Google")
-        print("  2. Claude Code — mejor calidad, requiere plan de pago ($20/mes)\n")
+        print("  2. Claude Code — mejor calidad, requiere plan de pago ($20/mes)")
+        print("  3. Ollama — modelos locales, gratis\n")
         resp = input("  Opcion [1]: ").strip()
-        return "claude" if resp == "2" else "gemini"
+        if resp == "2":
+            return "claude"
+        if resp == "3":
+            return "ollama"
+        return "gemini"
 
 
-def check_and_install(auto=False):
+def check_and_install(auto=False, require_assistant=True, ollama_cli: bool = False):
     """
     Verifica dependencias. Si falta algo, pregunta si instalar.
     Retorna True si todo esta listo.
+
+    Si require_assistant es False, normalmente solo valida dependencias Python.
+    Si además ollama_cli es True (p. ej. flag --ollama), también exige el
+    ejecutable ollama e intenta instalarlo.
     """
     missing = []
 
@@ -145,17 +231,26 @@ def check_and_install(auto=False):
         if not _try_import(module):
             missing.append(info)
 
-    # Determinar asistente
-    assistant = _load_assistant_choice()
-    if not assistant:
-        assistant = _choose_assistant()
-        _save_assistant_choice(assistant)
+    needs_ollama_bin = ollama_cli and not _ollama_on_path()
 
-    assistant_info = ASSISTANTS[assistant]
-    assistant_ok = shutil.which(assistant_info["bin"]) is not None
+    if not require_assistant:
+        if not missing and not needs_ollama_bin:
+            return True
+        assistant = None
+        assistant_info = None
+        assistant_ok = True
+    else:
+        # Determinar asistente
+        assistant = _load_assistant_choice()
+        if not assistant or assistant not in ASSISTANTS:
+            assistant = _choose_assistant()
+            _save_assistant_choice(assistant)
 
-    if not missing and assistant_ok:
-        return True
+        assistant_info = ASSISTANTS[assistant]
+        assistant_ok = shutil.which(assistant_info["bin"]) is not None
+
+        if not missing and assistant_ok:
+            return True
 
     # Mostrar que falta
     print("\n  Dependencias faltantes:\n")
@@ -166,9 +261,16 @@ def check_and_install(auto=False):
     node_ok = _check_node()
     npm_ok = _check_npm()
 
-    if not assistant_ok:
+    if needs_ollama_bin and not require_assistant:
+        print("    - ollama: CLI de Ollama (chat local, modelos LLM)")
+        print("      -> Se intentara instalar; si falla: https://ollama.com/download")
+
+    if require_assistant and not assistant_ok:
         bin_name = assistant_info["bin"]
-        if npm_ok:
+        if assistant == "ollama":
+            print(f"    - {bin_name}: {assistant_info['desc']}")
+            print("      -> Se intentara instalar; si falla: https://ollama.com/download")
+        elif npm_ok:
             print(f"    - {bin_name}: {assistant_info['desc']}")
         elif not node_ok:
             print(f"    - {bin_name}: {assistant_info['desc']}")
@@ -178,8 +280,13 @@ def check_and_install(auto=False):
 
     print()
 
-    # Si falta Node.js y el asistente, no podemos continuar
-    if not assistant_ok and not node_ok:
+    # Claude/Gemini se instalan con npm; hace falta Node.
+    if (
+        require_assistant
+        and not assistant_ok
+        and assistant in ("claude", "gemini")
+        and not node_ok
+    ):
         bin_name = assistant_info["bin"]
         print(f"  ! {bin_name} requiere Node.js para instalarse.")
         print("    1. Instala Node.js desde https://nodejs.org/ (LTS recomendado)")
@@ -218,18 +325,26 @@ def check_and_install(auto=False):
             print(f"  Error instalando {pkg}: {e}")
             return False
 
-    # Instalar asistente si falta
-    if not assistant_ok and npm_ok:
-        npm_pkg = assistant_info["npm"]
-        bin_name = assistant_info["bin"]
-        print(f"  Instalando {bin_name}...")
-        try:
-            _install_npm_package(npm_pkg)
-            print(f"  OK {bin_name}")
-        except Exception as e:
-            print(f"  Error instalando {bin_name}: {e}")
-            print(f"    Intenta manualmente: npm install -g {npm_pkg}\n")
+    # Ollama (elegido como asistente o por flag --ollama)
+    if needs_ollama_bin and not require_assistant:
+        if not _install_ollama():
             return False
+
+    if require_assistant and not assistant_ok:
+        if assistant == "ollama":
+            if not _install_ollama():
+                return False
+        elif npm_ok and assistant_info.get("npm"):
+            npm_pkg = assistant_info["npm"]
+            bin_name = assistant_info["bin"]
+            print(f"  Instalando {bin_name}...")
+            try:
+                _install_npm_package(npm_pkg)
+                print(f"  OK {bin_name}")
+            except Exception as e:
+                print(f"  Error instalando {bin_name}: {e}")
+                print(f"    Intenta manualmente: npm install -g {npm_pkg}\n")
+                return False
 
     print()
     return True

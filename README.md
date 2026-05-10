@@ -4,7 +4,7 @@
     <strong>Tu asistente academico con IA para la Universidad de Antioquia</strong>
   </p>
   <p align="center">
-    Descarga automatica de transcripciones de Zoom desde Moodle -> Analisis con Claude Code
+    Descarga automatica de transcripciones de Zoom desde Moodle o Ingenia -> Analisis con Claude, Gemini u Ollama
   </p>
   <p align="center">
     <img src="https://img.shields.io/badge/python-≥3.10-blue?style=flat-square&logo=python&logoColor=white" alt="Python">
@@ -19,9 +19,9 @@
 
 `claude_udea` es una herramienta de linea de comandos que:
 
-1. **Scrapea** las grabaciones de Zoom desde Moodle (UdeArroba)
+1. **Scrapea** las grabaciones de Zoom desde Moodle (UdeArroba) y/o Ingenia (Virtual Ingenieria)
 2. **Descarga** las transcripciones (y opcionalmente los videos)
-3. **Abre Claude Code** como asistente academico personalizado con tus clases
+3. **Abre un asistente AI** personalizado con tus clases
 
 Todo en un solo comando: `claude_udea`
 
@@ -31,9 +31,11 @@ Todo en un solo comando: `claude_udea`
 
 - **Sin navegador** -- login y scraping por HTTP directo, no necesita GUI ni Chromium
 - **Pipeline paralelo** -- scrapea materias y descarga grabaciones simultaneamente
+- **Ingenia / Virtual Ingenieria** -- acepta URLs `https://ingenia.udea.edu.co/zoom/meeting/<ID>` o solo el ID de reunion
 - **Setup interactivo** -- la primera vez te guia para configurar tus asignaturas
-- **Instalacion automatica** -- detecta e instala dependencias faltantes (incluido Claude Code)
-- **Sesion persistente** -- guarda tu sesion de Moodle para no pedir login cada vez
+- **Instalacion automatica** -- detecta e instala dependencias faltantes
+- **Sesion persistente** -- guarda tu sesion de Moodle para no pedir login cada vez (las materias de Ingenia no requieren login Moodle)
+- **Asistentes flexibles** -- Claude Code, Gemini CLI, Ollama local o solo transcripciones
 - **Descarga incremental** -- nunca re-descarga lo que ya tenes
 - **Deduplicacion inteligente** -- identifica grabaciones por fecha, sin duplicados
 - **Cross-platform** -- funciona en Windows, macOS y Linux (incluido Raspberry Pi headless)
@@ -59,8 +61,9 @@ La primera vez que ejecutes `claude_udea`, te preguntara que asistente queres us
 |-----------|-------|--------|
 | **Gemini CLI** (Google) | Gratis | 1000 requests/dia con cuenta Google |
 | **Claude Code** (Anthropic) | $20/mes (Pro) | Mejor calidad de respuestas |
+| **Ollama** local | Gratis | Depende de tu maquina y modelo |
 
-Podes cambiar de asistente despues editando `assistant` en `~/claude-udea/config.json`.
+Podes cambiar de asistente despues editando `assistant` en `~/claude-udea/config.json`, o usar `--ollama` para abrir un chat local sin cuenta.
 
 ---
 
@@ -107,16 +110,26 @@ echo $PATH | grep -q '.local/bin' && echo "OK" || echo "Agrega ~/.local/bin a tu
 
 ### Primera vez
 
-> **Antes de empezar**: tene listos los links de la pagina de grabaciones de cada asignatura en Moodle.
-> Es la pagina donde ves la lista de grabaciones de Zoom con los botones "Ver grabacion".
+> **Antes de empezar**: tene listos los links de la pagina de grabaciones de cada asignatura en Moodle o Ingenia.
+> En Moodle es la pagina donde ves la lista de grabaciones de Zoom con los botones "Ver grabacion".
 > Solo se piden **una vez** durante la configuracion inicial.
 
-#### Como conseguir el link?
+#### Como conseguir el link? (Moodle)
 
 1. Entra a [UdeArroba](https://udearroba.udea.edu.co/)
 2. Abri la asignatura
 3. Busca la actividad de **Zoom** donde estan las grabaciones
 4. Copia la URL de esa pagina -- es algo como `https://udearroba.udea.edu.co/mod/zoom/view.php?id=XXXXX`
+
+#### Como conseguir el link? (Ingenia / Virtual Ingenieria)
+
+1. Entra al buscador de clases en [Ingenia](https://ingenia.udea.edu.co/)
+2. Localiza tu curso y abre la pagina de esa reunion Zoom
+3. Copia la URL del navegador -- tiene esta forma:
+
+   `https://ingenia.udea.edu.co/zoom/meeting/96660122811`
+
+   Tambien podes pegar solo el numero final y la herramienta arma la URL.
 
 #### Ejecutar
 
@@ -129,7 +142,7 @@ Se va a:
 1. Verificar e instalar dependencias faltantes
 2. Preguntar que asistente AI queres (Gemini gratis o Claude de pago)
 3. Pedir los links de grabaciones de cada asignatura (solo la primera vez)
-4. Pedir usuario y contrasena de Moodle en la terminal (sin navegador)
+4. Pedir usuario y contrasena de Moodle en la terminal solo si hay materias Moodle
 5. Scrapear y descargar todo en paralelo
 6. Abrir el asistente AI con tus transcripciones
 
@@ -139,7 +152,7 @@ Se va a:
 claude_udea              # Actualiza todo y abre Claude Code
 ```
 
-Si tu sesion de Moodle sigue activa, no pide credenciales -- todo corre automaticamente.
+Si tu sesion de Moodle sigue activa, no pide credenciales -- todo corre automaticamente. Si todas tus materias son de Ingenia, no pide login de Moodle.
 
 ### Cambiar de asistente
 
@@ -152,18 +165,39 @@ Edita `~/claude-udea/config.json` (o `C:\claude-udea\config.json` en Windows) y 
 }
 ```
 
-Valores: `"claude"` o `"gemini"`.
+Valores: `"claude"` o `"gemini"`. Para Ollama usa el flag `--ollama`.
 
 ### Opciones
 
 ```bash
 claude_udea --status          # Ver estado de descargas por asignatura
-claude_udea --skip-scrape     # Solo descargar (sin re-scrapear Moodle)
+claude_udea --skip-scrape     # Solo descargar (sin re-scrapear Moodle/Ingenia)
 claude_udea --skip-video      # Solo transcripciones (sin preguntar)
 claude_udea --all             # Video + transcripciones (sin preguntar)
 claude_udea --dry-run         # Simular sin descargar nada
 claude_udea --add-course      # Agregar una nueva asignatura
+claude_udea --no-assistant    # Solo descarga y organiza .vtt; no abre asistente AI
+claude_udea --no-claude       # Alias compatible de --no-assistant
+claude_udea --ollama          # Tras descargar, abre un chat local con Ollama
+claude_udea --ollama --ollama-model mistral   # Elegir modelo instalado en Ollama
 ```
+
+### Asistente local con Ollama
+
+Si queres usar modelos locales, instala [Ollama](https://ollama.com/) y descarga un modelo:
+
+```bash
+ollama pull llama3.2
+claude_udea --ollama --skip-video
+```
+
+Al terminar la descarga se abre un chat en la terminal. Usa `CLAUDE.md`, `index.json` y las transcripciones locales. Para cargar una clase en el contexto:
+
+```text
+/leer <carpeta-del-curso>/archivo.vtt
+```
+
+Tambien podes listar archivos con `/listado` o `/ls`. El modelo por defecto es `llama3.2`; se puede cambiar con `--ollama-model` o con la variable `CLAUDE_UDEA_OLLAMA_MODEL`.
 
 ### Filtrar por asignatura
 
@@ -212,7 +246,7 @@ Compromisos encontrados:
 ~/claude-udea/                    # macOS/Linux
 C:\claude-udea\                   # Windows
 |-- CLAUDE.md                     # Instrucciones para Claude Code (auto-generado)
-|-- config.json                   # Tus asignaturas configuradas
+|-- config.json                   # Tus asignaturas configuradas (Moodle o Ingenia)
 |-- recordings.json               # Registro de grabaciones encontradas
 |-- .moodle-session.json          # Sesion de Moodle (cookies)
 |-- .claude/
@@ -243,18 +277,18 @@ C:\claude-udea\                   # Windows
 
 ```
 +-----------+     +-----------+     +-----------+     +----------------+
-|  Moodle   |---->| Scraping  |---->| Descarga  |---->| Claude / Gemini|
-| (UdeArroba)|    | (requests)|     | (yt-dlp)  |     |  (Asistente)   |
+|Moodle/Ing.|---->| Scraping  |---->| Descarga  |---->| Claude/Gem/Oll.|
+|           |     | (requests)|     | (yt-dlp)  |     |  (Asistente)   |
 +-----------+     +-----------+     +-----------+     +----------------+
      |                 |                  |                  |
   Login HTTP      Busca links        Baja VTTs        Lee transcripciones
   (una vez)      en paralelo       en paralelo        y responde preguntas
 ```
 
-1. **Login**: POST directo con usuario/contrasena, sin navegador. La sesion se guarda localmente.
-2. **Scraping**: requests + BeautifulSoup scrapean las tablas de grabaciones de cada materia en paralelo.
+1. **Login**: POST directo con usuario/contrasena para Moodle, sin navegador. La sesion se guarda localmente. Ingenia no requiere login Moodle.
+2. **Scraping**: requests + BeautifulSoup scrapean Moodle e Ingenia en paralelo.
 3. **Descarga**: yt-dlp descarga transcripciones (`.vtt`) en paralelo. Las descargas empiezan a medida que cada scrape termina (pipeline). Cada VTT se enriquece con metadata (fecha, asignatura, duracion).
-4. **Asistente AI**: Se abre Claude Code o Gemini CLI (segun tu eleccion) con instrucciones personalizadas (`CLAUDE.md` / `GEMINI.md`) que le dicen que asignaturas tenes, donde estan las transcripciones, y como responder.
+4. **Asistente AI**: Se abre Claude Code, Gemini CLI u Ollama (segun tu eleccion) con instrucciones personalizadas que le dicen que asignaturas tenes, donde estan las transcripciones, y como responder.
 
 ---
 
@@ -262,6 +296,7 @@ C:\claude-udea\                   # Windows
 
 - Tus credenciales se piden por terminal y **solo se usan para hacer login** -- no se guardan en disco
 - Las cookies de sesion se guardan localmente en `.moodle-session.json`
+- Las paginas de Ingenia se consultan publicamente y no usan la sesion de Moodle
 - Todo se procesa localmente en tu maquina
 - Las transcripciones nunca se suben a ningun servidor externo
 - Claude Code lee los archivos locales directamente
