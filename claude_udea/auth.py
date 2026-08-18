@@ -1,10 +1,12 @@
 """
 Autenticación en Moodle UdeA sin navegador.
 Login directo por HTTP con requests.
+Guarda credenciales para re-login automático cuando la sesión expire.
 """
 
 import getpass
 import json
+import os
 import re
 from pathlib import Path
 
@@ -12,12 +14,17 @@ import requests
 from bs4 import BeautifulSoup
 
 SESSION_FILE = ".moodle-session.json"
+CREDENTIALS_FILE = ".moodle-credentials.json"
 LOGIN_URL = "https://udearroba.udea.edu.co/internos/login/index.php"
 DASHBOARD_URL = "https://udearroba.udea.edu.co/internos/my/"
 
 
 def _session_path(work_dir: Path) -> Path:
     return work_dir / SESSION_FILE
+
+
+def _credentials_path(work_dir: Path) -> Path:
+    return work_dir / CREDENTIALS_FILE
 
 
 def save_session(session: requests.Session, work_dir: Path):
@@ -32,6 +39,31 @@ def save_session(session: requests.Session, work_dir: Path):
         })
     with open(_session_path(work_dir), "w", encoding="utf-8") as f:
         json.dump(data, f)
+
+
+def _save_credentials(work_dir: Path, username: str, password: str):
+    """Guarda credenciales para re-login automático."""
+    path = _credentials_path(work_dir)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"username": username, "password": password}, f)
+    # Restringir permisos (solo el usuario puede leer)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _load_credentials(work_dir: Path) -> tuple[str, str] | None:
+    """Carga credenciales guardadas."""
+    path = _credentials_path(work_dir)
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("username", ""), data.get("password", "")
+    except Exception:
+        return None
 
 
 def load_session(work_dir: Path) -> requests.Session | None:
@@ -50,13 +82,12 @@ def load_session(work_dir: Path) -> requests.Session | None:
     for c in cookies:
         session.cookies.set(c["name"], c["value"], domain=c["domain"], path=c["path"])
 
-    # Verificar que la sesión siga activa
+    # Verificar que la sesión siga activa (seguir redirects para manejar SSO)
     try:
-        r = session.get(DASHBOARD_URL, allow_redirects=False, timeout=15)
-        # Si redirige al login, la sesión expiró
-        if r.status_code in (301, 302, 303) and "login" in r.headers.get("Location", ""):
+        r = session.get(DASHBOARD_URL, allow_redirects=True, timeout=15)
+        if "login" in r.url.lower():
             return None
-        if r.status_code == 200 and "login" not in r.url:
+        if r.status_code == 200:
             return session
     except Exception:
         pass
@@ -64,24 +95,8 @@ def load_session(work_dir: Path) -> requests.Session | None:
     return None
 
 
-def login(work_dir: Path, username: str = None, password: str = None) -> requests.Session:
-    """
-    Intenta restaurar sesión guardada. Si no sirve, pide credenciales
-    y hace login por HTTP POST.
-    """
-    # Intentar sesión guardada
-    session = load_session(work_dir)
-    if session:
-        print("  ✔ Sesión activa (login no necesario)\n")
-        return session
-
-    # Pedir credenciales si no se pasaron
-    if not username:
-        print()
-        username = input("  Usuario Moodle UdeA: ").strip()
-    if not password:
-        password = getpass.getpass("  Contraseña: ")
-
+def _do_login_request(username: str, password: str) -> requests.Session:
+    """Hace login HTTP POST y retorna la sesión autenticada."""
     session = requests.Session()
 
     # Obtener logintoken del formulario
@@ -100,7 +115,6 @@ def login(work_dir: Path, username: str = None, password: str = None) -> request
 
     # Verificar login exitoso
     if "login" in r.url.lower() and "errorcode" not in r.url:
-        # Revisar si hay mensaje de error en la página
         soup = BeautifulSoup(r.text, "html.parser")
         error = soup.find("div", {"class": "alert-danger"}) or soup.find("div", {"id": "loginerrormessage"})
         if error:
@@ -113,8 +127,46 @@ def login(work_dir: Path, username: str = None, password: str = None) -> request
     if "login" in r.url.lower():
         raise ValueError("Login fallido: no se pudo acceder al dashboard")
 
+    return session
+
+
+def login(work_dir: Path, username: str = None, password: str = None) -> requests.Session:
+    """
+    Intenta restaurar sesión guardada. Si expiró, re-login automático
+    con credenciales guardadas. Solo pide credenciales la primera vez.
+    """
+    # 1. Intentar sesión guardada
+    session = load_session(work_dir)
+    if session:
+        print("  ✔ Sesión activa\n")
+        return session
+
+    # 2. Intentar re-login con credenciales guardadas
+    if not username and not password:
+        saved = _load_credentials(work_dir)
+        if saved:
+            saved_user, saved_pass = saved
+            if saved_user and saved_pass:
+                try:
+                    session = _do_login_request(saved_user, saved_pass)
+                    save_session(session, work_dir)
+                    print("  ✔ Re-login automático exitoso\n")
+                    return session
+                except ValueError:
+                    # Credenciales guardadas ya no sirven, pedir nuevas
+                    print("  ⚠ Credenciales guardadas inválidas, pidiendo nuevas...\n")
+
+    # 3. Pedir credenciales manualmente
+    if not username:
+        print()
+        username = input("  Usuario Moodle UdeA: ").strip()
+    if not password:
+        password = getpass.getpass("  Contraseña: ")
+
+    session = _do_login_request(username, password)
     save_session(session, work_dir)
-    print("  ✔ Login exitoso, sesión guardada\n")
+    _save_credentials(work_dir, username, password)
+    print("  ✔ Login exitoso, credenciales guardadas\n")
     return session
 
 
@@ -126,6 +178,11 @@ def _scrape_one(session: requests.Session, slug: str, course_info: dict) -> tupl
         r.raise_for_status()
     except Exception as e:
         print(f"  ⚠ Error accediendo a {course_info['name']}: {e}")
+        return slug, []
+
+    # Verificar que no nos redirigió al login
+    if "login" in r.url.lower():
+        print(f"  ⚠ Sesión expirada al acceder a {course_info['name']}")
         return slug, []
 
     soup = BeautifulSoup(r.text, "html.parser")
@@ -145,12 +202,20 @@ def _scrape_one(session: requests.Session, slug: str, course_info: dict) -> tupl
         if len(cells) < 4:
             continue
 
+        meeting_id = cells[0].get_text(strip=True)
+        topic = cells[1].get_text(strip=True)
+        start_date = cells[2].get_text(strip=True)
+        duration = cells[3].get_text(strip=True)
+
         hidden_input = row.find("input", {"name": "zoomplayredirect"})
         if not hidden_input:
+            # Grabación visible en Moodle pero sin URL (aún procesándose en Zoom)
+            print(f"  ⚠ {course_info['name']}: grabación del {start_date} sin URL (procesándose en Zoom)")
             continue
 
         href = hidden_input.get("value", "")
         if not href:
+            print(f"  ⚠ {course_info['name']}: grabación del {start_date} con URL vacía")
             continue
 
         match = re.search(r"/rec/(?:share|play)/([^?\s]+)", href)
@@ -158,11 +223,6 @@ def _scrape_one(session: requests.Session, slug: str, course_info: dict) -> tupl
         if rec_id in seen:
             continue
         seen.add(rec_id)
-
-        meeting_id = cells[0].get_text(strip=True)
-        topic = cells[1].get_text(strip=True)
-        start_date = cells[2].get_text(strip=True)
-        duration = cells[3].get_text(strip=True)
 
         links.append({
             "url": href.split("?")[0],

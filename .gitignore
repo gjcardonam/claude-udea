@@ -8,6 +8,7 @@ downloads/
 .cookies.json
 .session-state.json
 .moodle-session.json
+.moodle-credentials.json
 recordings.json
 
 # Python
