@@ -3,6 +3,7 @@ CLI principal: claude_udea
 """
 
 import json
+import shutil
 import subprocess
 import sys
 import os
@@ -468,7 +469,7 @@ def _get_assistant(config) -> str:
     return config.get("assistant", "claude")
 
 
-def fase_final(config, recordings, target_courses):
+def fase_final(config, recordings, target_courses, use_tmux=True):
     from claude_udea.download import copy_transcripts, count_transcripts
 
     download_dir = Path(config["download_dir"])
@@ -515,22 +516,60 @@ def fase_final(config, recordings, target_courses):
     if assistant == "gemini":
         cmd = ["gemini"]
     else:
-        cmd = ["claude", "--dangerously-skip-permissions", prompt]
+        # --dangerously-skip-permissions no funciona como root; acceptEdits
+        # auto-aprueba lectura/edicion de archivos y pregunta por el resto
+        cmd = ["claude", "--permission-mode", "acceptEdits", prompt]
 
-    try:
-        subprocess.run(cmd, cwd=str(work_dir.resolve()))
-    except FileNotFoundError:
+    if shutil.which(cmd[0]) is None:
         print(f"  '{assistant}' no esta en el PATH.")
         if assistant == "gemini":
             print("  Instala con: npm install -g @google/gemini-cli")
         else:
             print("  Instala con: npm install -g @anthropic-ai/claude-code")
         print(f"  O abri manualmente en: {work_dir.resolve()}")
+        return
+
+    from claude_udea import tmux_session
+
+    if use_tmux:
+        if tmux_session.run_in_tmux(cmd, str(work_dir.resolve())):
+            return
+        if not tmux_session.tmux_available():
+            print("  tmux no esta instalado: abro el asistente en primer plano.")
+            print("  Para dejarlo corriendo al cerrar la terminal instala tmux:")
+            print("    sudo apt install tmux   |   brew install tmux\n")
+
+    subprocess.run(cmd, cwd=str(work_dir.resolve()))
 
 
 # ─── Main ────────────────────────────────────────────────────
 
 def main():
+    args = sys.argv[1:]
+
+    from claude_udea import tmux_session
+    session = tmux_session.session_name()
+
+    # Conectarse a una sesion ya corriendo (sin scrapear ni descargar)
+    if "--attach" in args or "-a" in args:
+        if not tmux_session.tmux_available():
+            print("\n  tmux no esta instalado.\n")
+            sys.exit(1)
+        if not tmux_session.session_exists(session):
+            print(f"\n  No hay ninguna sesion '{session}' corriendo.")
+            print("  Arrancala con: claude_udea\n")
+            sys.exit(1)
+        tmux_session.attach(session)
+        return
+
+    # Cerrar la sesion persistente
+    if "--stop" in args or "--kill" in args:
+        if tmux_session.kill_session(session):
+            print(f"\n  Sesion '{session}' cerrada.\n")
+        else:
+            print(f"\n  No hay ninguna sesion '{session}' corriendo.\n")
+        return
+
     # Validar dependencias
     from claude_udea.deps import check_and_install
     if not check_and_install():
@@ -549,13 +588,13 @@ def main():
     archive_path = get_archive_path(download_dir)
 
     # Flags
-    args = sys.argv[1:]
     dry_run = "--dry-run" in args
     status_only = "--status" in args
     skip_scrape = "--skip-scrape" in args
     skip_video_flag = "--skip-video" in args
     download_all_flag = "--all" in args
     add_course_flag = "--add-course" in args
+    use_tmux = "--no-tmux" not in args
 
     if add_course_flag:
         from claude_udea.setup import add_course
@@ -580,6 +619,10 @@ def main():
 
     # Status
     if status_only:
+        if tmux_session.session_exists(session):
+            print(f"  ● asistente corriendo en tmux ('{session}') — claude_udea --attach\n")
+        else:
+            print("  ○ asistente detenido\n")
         recordings = load_recordings(recordings_path)
         if not recordings:
             print("  No hay datos aún.\n")
@@ -630,4 +673,4 @@ def main():
 
     # Organizar transcripciones + Claude Code
     if not dry_run:
-        fase_final(config, recordings, target_courses)
+        fase_final(config, recordings, target_courses, use_tmux=use_tmux)

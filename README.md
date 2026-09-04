@@ -38,6 +38,7 @@ Todo en un solo comando: `claude_udea`
 - **Deduplicacion inteligente** -- identifica grabaciones por fecha, sin duplicados
 - **Cross-platform** -- funciona en Windows, macOS y Linux (incluido Raspberry Pi headless)
 - **Skills de Claude** -- comandos especializados para estudiar con IA
+- **Sesion persistente** -- el asistente corre en tmux: cerra la terminal y sigue vivo
 
 ---
 
@@ -157,7 +158,10 @@ Valores: `"claude"` o `"gemini"`.
 ### Opciones
 
 ```bash
-claude_udea --status          # Ver estado de descargas por asignatura
+claude_udea --status          # Ver estado de descargas y de la sesion
+claude_udea --attach          # Volver a la sesion del asistente (alias: -a)
+claude_udea --stop            # Cerrar la sesion del asistente
+claude_udea --no-tmux         # Abrir el asistente en primer plano (sin tmux)
 claude_udea --skip-scrape     # Solo descargar (sin re-scrapear Moodle)
 claude_udea --skip-video      # Solo transcripciones (sin preguntar)
 claude_udea --all             # Video + transcripciones (sin preguntar)
@@ -173,6 +177,28 @@ claude_udea ingenieria-web optimizacion  # Varias especificas
 ```
 
 ---
+
+## Sesion persistente (tmux)
+
+El asistente se abre dentro de una sesion de **tmux** llamada `claude_udea`, asi que
+sigue vivo aunque cierres la terminal, te desconectes por SSH o se caiga la red.
+
+```bash
+claude_udea            # descarga todo y abre el asistente en tmux
+# Ctrl+b, despues d    -> te desconectas; el asistente sigue corriendo
+claude_udea --attach   # te volves a conectar (no re-descarga nada)
+claude_udea --status   # ● corriendo  /  ○ detenido
+claude_udea --stop     # lo cerras
+```
+
+Notas:
+
+- Si tmux no esta instalado, el asistente se abre en primer plano como antes
+  (`sudo apt install tmux` en Linux, `brew install tmux` en macOS).
+- En Windows no hay tmux nativo: usa WSL para tener sesion persistente.
+- Para usar otro nombre de sesion: `export CLAUDE_UDEA_SESSION=mi-sesion`.
+- Si el asistente termina o falla, el panel queda abierto con el error hasta
+  que presiones Enter.
 
 ## Skills de Claude Code
 
