@@ -114,14 +114,22 @@ def run_setup(work_dir: Path):
         print("  Cancelado. Ejecutá claude_udea de nuevo.\n")
         return False
 
-    # Guardar config.json
-    config = {
+    # Guardar config.json preservando claves previas (ej. "assistant")
+    config_path = work_dir / "config.json"
+    config = {}
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+        except Exception:
+            config = {}
+
+    config.update({
         "download_dir": "./downloads",
         "recordings_file": "./recordings.json",
         "courses": courses,
-    }
+    })
 
-    config_path = work_dir / "config.json"
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
 

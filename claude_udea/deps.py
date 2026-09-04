@@ -79,14 +79,21 @@ def _load_assistant_choice() -> str | None:
 
 
 def _save_assistant_choice(assistant: str):
-    """Guarda el asistente elegido en config.json."""
-    config_path = _get_work_dir() / "config.json"
-    if not config_path.exists():
-        return
+    """
+    Guarda el asistente elegido en config.json.
+
+    En el primer arranque esto corre antes de que exista el config, asi que
+    creamos el archivo; si no, se volveria a preguntar en cada ejecucion.
+    """
+    work_dir = _get_work_dir()
+    config_path = work_dir / "config.json"
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
+        config = {}
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
         config["assistant"] = assistant
+        work_dir.mkdir(parents=True, exist_ok=True)
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
     except Exception:
