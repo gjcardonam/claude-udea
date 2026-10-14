@@ -13,6 +13,7 @@ DEPS = {
     "bs4": {"pip": "beautifulsoup4", "desc": "Parser HTML para scraping de grabaciones"},
     "questionary": {"pip": "questionary", "desc": "Menus interactivos en terminal"},
     "tqdm": {"pip": "tqdm", "desc": "Barras de progreso"},
+    "keyring": {"pip": "keyring>=25.0", "desc": "Almacén seguro del sistema para credenciales y sesiones"},
 }
 
 ASSISTANTS = {
@@ -134,7 +135,7 @@ def _choose_assistant() -> str:
         return "claude" if resp == "2" else "gemini"
 
 
-def check_and_install(auto=False):
+def check_and_install(auto=False, skip_assistant=False, require_whisper=False):
     """
     Verifica dependencias. Si falta algo, pregunta si instalar.
     Retorna True si todo esta listo.
@@ -144,15 +145,21 @@ def check_and_install(auto=False):
     for module, info in DEPS.items():
         if not _try_import(module):
             missing.append(info)
+    if require_whisper and not _try_import("faster_whisper"):
+        missing.append({
+            "pip": "faster-whisper>=1.2.0",
+            "desc": "Transcripción local de video con Whisper",
+        })
 
-    # Determinar asistente
-    assistant = _load_assistant_choice()
-    if not assistant:
-        assistant = _choose_assistant()
-        _save_assistant_choice(assistant)
-
-    assistant_info = ASSISTANTS[assistant]
-    assistant_ok = shutil.which(assistant_info["bin"]) is not None
+    assistant_info = None
+    assistant_ok = True
+    if not skip_assistant:
+        assistant = _load_assistant_choice()
+        if not assistant:
+            assistant = _choose_assistant()
+            _save_assistant_choice(assistant)
+        assistant_info = ASSISTANTS[assistant]
+        assistant_ok = shutil.which(assistant_info["bin"]) is not None
 
     if not missing and assistant_ok:
         return True
@@ -166,7 +173,7 @@ def check_and_install(auto=False):
     node_ok = _check_node()
     npm_ok = _check_npm()
 
-    if not assistant_ok:
+    if assistant_info and not assistant_ok:
         bin_name = assistant_info["bin"]
         if npm_ok:
             print(f"    - {bin_name}: {assistant_info['desc']}")
@@ -179,7 +186,7 @@ def check_and_install(auto=False):
     print()
 
     # Si falta Node.js y el asistente, no podemos continuar
-    if not assistant_ok and not node_ok:
+    if assistant_info and not assistant_ok and not node_ok:
         bin_name = assistant_info["bin"]
         print(f"  ! {bin_name} requiere Node.js para instalarse.")
         print("    1. Instala Node.js desde https://nodejs.org/ (LTS recomendado)")
@@ -219,7 +226,7 @@ def check_and_install(auto=False):
             return False
 
     # Instalar asistente si falta
-    if not assistant_ok and npm_ok:
+    if assistant_info and not assistant_ok and npm_ok:
         npm_pkg = assistant_info["npm"]
         bin_name = assistant_info["bin"]
         print(f"  Instalando {bin_name}...")

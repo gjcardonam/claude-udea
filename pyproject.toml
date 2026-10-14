@@ -13,13 +13,20 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "questionary>=2.0.0",
     "tqdm>=4.60.0",
+    "keyring>=25.0",
 ]
 
 [project.scripts]
 claude_udea = "claude_udea.cli:main"
 
+[project.optional-dependencies]
+whisper = ["faster-whisper>=1.2.0"]
+
 [tool.setuptools.packages.find]
 include = ["claude_udea*"]
+
+[tool.setuptools]
+py-modules = ["transcribe_missing"]
 
 [tool.setuptools.package-data]
 claude_udea = ["templates/**/*.md", "templates/.claude/**/*.md"]
